@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# SQLite (héritage : la base est désormais Postgres)
+backend/data/*.db
+backend/data/*.db-journal
+backend/data/*.db-shm
+backend/data/*.db-wal
+
+# Node
+node_modules/
+dist/
+.vite/
+*.local
+
+# Env
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+.vercel

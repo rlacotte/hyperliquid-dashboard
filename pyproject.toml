@@ -1,0 +1,22 @@
+[project]
+name = "hyperliquid-dashboard-api"
+version = "1.0.0"
+description = "API FastAPI du dashboard Hyperliquid, déployée en fonction serverless Vercel"
+# Le builder Vercel impose son propre CPython (3.14 à ce jour) : ni
+# .python-version ni un requires-python plus strict ne le font changer d'avis.
+# Les versions épinglées ci-dessous sont donc choisies pour disposer de wheels
+# cp314 — sans quoi uv tente une compilation depuis les sources (pydantic-core,
+# psycopg-binary) qui échoue faute de toolchain Rust.
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.139.2",
+    "httpx==0.28.1",
+    "pydantic==2.13.4",
+    "python-dotenv==1.0.1",
+    "psycopg[binary]==3.2.13",
+]
+
+[tool.setuptools]
+# Le code applicatif vit dans backend/app et est embarqué via includeFiles
+# (cf. vercel.json) : rien à empaqueter ici.
+packages = []

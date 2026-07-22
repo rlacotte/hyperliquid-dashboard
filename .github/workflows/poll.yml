@@ -1,0 +1,50 @@
+# Déclencheur de collecte.
+#
+# Le plan Vercel Hobby ne déclenche les crons qu'une fois par jour, ce qui est
+# insuffisant : les critères d'alerte comparent l'état courant à l'historique
+# des 10 à 120 dernières minutes, donc sans collecte régulière aucune alerte ne
+# peut se déclencher. Ce workflow appelle l'endpoint de collecte à la place.
+#
+# GitHub planifie les workflows au mieux (retards de plusieurs minutes fréquents
+# aux heures chargées) : on boucle donc en interne pour lisser la cadence.
+#
+# Prérequis — deux secrets de dépôt :
+#   DASHBOARD_URL : https://<projet>.vercel.app
+#   CRON_SECRET   : identique à la variable d'environnement Vercel
+#
+# En passant sur un plan Vercel Pro, supprimer ce fichier et remplacer le
+# schedule de vercel.json par "* * * * *".
+name: poll-hyperliquid
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: poll-hyperliquid
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Collecte toutes les 30s pendant ~5 min
+        env:
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -u
+          for i in $(seq 1 10); do
+            code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
+              --max-time 60 \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              "${DASHBOARD_URL}/api/cron/poll" || echo "000")
+            echo "cycle $i -> HTTP $code"
+            head -c 400 /tmp/out.json 2>/dev/null || true
+            echo
+            # Un cycle raté ne doit pas interrompre la série : la collecte
+            # suivante repartira d'un historique simplement un peu plus creux.
+            [ "$i" -lt 10 ] && sleep 30
+          done

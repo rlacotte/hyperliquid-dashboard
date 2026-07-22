@@ -1,0 +1,9 @@
+# Le bundle de la fonction Python n'a besoin que de backend/app.
+backend/venv
+backend/data
+**/__pycache__
+node_modules
+frontend/dist
+.vscode
+.idea
+.DS_Store
