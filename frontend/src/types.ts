@@ -49,6 +49,7 @@ export interface SignalScore {
   direction: Direction;
   label: string;
   value: number;
+  active?: boolean; // vrai si le critère contribue au score
 }
 
 export interface ConfluenceScore {
@@ -56,6 +57,10 @@ export interface ConfluenceScore {
   score: number; // [-10, +10]
   direction: Direction;
   active_count: number;
+  regime: string;            // "strong_bull" | "strong_bear" | "short_covering" | "exhaustion" | "none"
+  regime_label: string;      // libellé lisible
+  confidence: number;        // fiabilité [0, 1]
+  volume_confirmed: boolean;
   breakdown: SignalScore[];
 }
 

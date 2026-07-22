@@ -252,32 +252,51 @@ def evaluate_confluence(result: ConfluenceResult, w: _CycleWriter) -> None:
     score agrégé dépasse CONFLUENCE_SCORE_WARN. Comme le score évolue à chaque
     cycle, on met à jour l'alerte active (score/direction/message) plutôt que
     d'en créer une nouvelle.
+
+    Le régime (prix×OI) est central dans l'interprétation :
+    - strong_bull / strong_bear  → SOLIDE, sévérité pleine
+    - short_covering / exhaustion → FRAGILE, dégradé à INFO (rebond éphémère)
+    On n'alerte pas sur un régime 'none' (pas de croisement significatif).
     """
     score = result.score
     active_count = result.active_count
+    regime = result.regime
+
+    # Pas de régime identifiable → pas d'alerte de confluence
+    if regime == "none":
+        w.resolve(result.coin, Criterion.CONFLUENCE, "pas de régime prix×OI")
+        return
 
     # Conditions de déclenchement : assez de critères actifs + amplitude suffisante
     if active_count < config.CONFLUENCE_MIN_CRITERIA or abs(score) < config.CONFLUENCE_SCORE_WARN:
         w.resolve(result.coin, Criterion.CONFLUENCE, "confluence revenue sous le seuil")
         return
 
-    # Sévérité selon l'amplitude du score
-    if abs(score) >= config.CONFLUENCE_SCORE_CRIT:
+    # Sévérité selon l'amplitude du score ET la fiabilité du régime.
+    # Les régimes fragiles (covering/exhaustion) sont plafonnés à WARNING.
+    amp_critical = abs(score) >= config.CONFLUENCE_SCORE_CRIT
+    is_solid = result.confidence >= 0.8
+    if amp_critical and is_solid:
         severity = Severity.CRITICAL
-    else:
+    elif is_solid or amp_critical:
         severity = Severity.WARNING
+    else:
+        severity = Severity.INFO  # régime fragile, à surveiller
 
-    direction_fr = {"bullish": "haussier", "bearish": "baissier", "neutral": "neutre"}
-    dir_label = direction_fr.get(result.direction, result.direction)
     arrow = "▲" if result.direction == "bullish" else "▼" if result.direction == "bearish" else "●"
     active_labels = [s.label for s in result.breakdown if s.active]
+    vol_marker = " +Vol✓" if result.volume_confirmed else " (vol faible)"
     message = (
-        f"{result.coin} {arrow} signal {dir_label} (score {score:+.1f}, "
+        f"{result.coin} {arrow} {result.regime_label} (score {score:+.1f}{vol_marker}, "
         f"{active_count} critères: {', '.join(active_labels)})"
     )
     details = {
         "score": score,
         "active_count": active_count,
+        "regime": regime,
+        "regime_label": result.regime_label,
+        "confidence": result.confidence,
+        "volume_confirmed": result.volume_confirmed,
         "breakdown": [
             {
                 "criterion": s.criterion.value,

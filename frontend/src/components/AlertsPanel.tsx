@@ -116,14 +116,24 @@ export function AlertsPanel({ alerts, onAck, onAckAll, onSelectCoin }: Props) {
           const border = confStyle?.border ?? base.border;
           const text = confStyle?.text ?? base.text;
           const isConfluence = alert.criterion === "confluence";
+          const regimeLabel = isConfluence
+            ? (alert.details as Record<string, unknown>).regime_label as string | undefined
+            : undefined;
+          const volConfirmed = isConfluence
+            ? Boolean((alert.details as Record<string, unknown>).volume_confirmed)
+            : false;
 
           return (
             <div key={alert.id} className={`rounded-lg border ${border} ${bg} p-3`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="mb-1 flex flex-wrap items-center gap-2">
-                    {/* Badge directionnel pour confluence, sévérité sinon */}
-                    {isConfluence && alert.direction ? (
+                    {/* Régime en évidence pour confluence, sévérité sinon */}
+                    {isConfluence && regimeLabel ? (
+                      <span className={`text-[10px] font-bold ${text}`}>
+                        {directionArrow(alert.direction)} {regimeLabel.toUpperCase()}
+                      </span>
+                    ) : isConfluence && alert.direction ? (
                       <span className={`text-[10px] font-bold ${text}`}>
                         {directionArrow(alert.direction)} {directionLabel(alert.direction).toUpperCase()}
                       </span>
@@ -134,6 +144,9 @@ export function AlertsPanel({ alerts, onAck, onAckAll, onSelectCoin }: Props) {
                       <span className={`font-mono text-sm font-bold ${text}`}>
                         {fmtScore(alert.score)}
                       </span>
+                    )}
+                    {volConfirmed && (
+                      <span className="text-[10px] text-blue-400">📊 vol✓</span>
                     )}
                     <button
                       onClick={() => onSelectCoin(alert.coin)}

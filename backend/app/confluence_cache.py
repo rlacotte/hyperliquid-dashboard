@@ -41,6 +41,10 @@ def _from_dict(d: dict) -> ConfluenceResult:
         score=d["score"],
         direction=d["direction"],
         active_count=d["active_count"],
+        regime=d.get("regime", "none"),
+        regime_label=d.get("regime_label", ""),
+        confidence=d.get("confidence", 0.0),
+        volume_confirmed=d.get("volume_confirmed", False),
         breakdown=[
             SignalScore(
                 criterion=Criterion(b["criterion"]),
