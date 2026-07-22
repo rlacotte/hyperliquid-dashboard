@@ -46,5 +46,7 @@ jobs:
             echo
             # Un cycle raté ne doit pas interrompre la série : la collecte
             # suivante repartira d'un historique simplement un peu plus creux.
-            [ "$i" -lt 10 ] && sleep 30
+            # `if` et non `[ ... ] && sleep` : au dernier tour le test est faux,
+            # et son code de retour deviendrait celui de l'étape entière.
+            if [ "$i" -lt 10 ]; then sleep 30; fi
           done
