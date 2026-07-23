@@ -75,6 +75,20 @@ L'anti-spam des alertes ne se règle plus par fenêtre temporelle : il est
 structurel (au plus une alerte active par couple coin/critère, imposé par un
 index unique en base).
 
+### Notifications Telegram / Discord
+
+Les alertes créées à chaque cycle sont poussées vers les canaux configurés
+(un message groupé par cycle ; sans configuration, aucune notification) :
+
+| Variable | Description |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | Bot créé via @BotFather + id du chat destinataire |
+| `DISCORD_WEBHOOK_URL` | Webhook d'un salon (Paramètres du salon → Intégrations) |
+| `NOTIFY_MIN_SEVERITY` | Sévérité minimale notifiée (`critical` par défaut) |
+
+Seules les alertes *nouvelles* déclenchent un envoi — une alerte qui reste
+active d'un cycle à l'autre a déjà été signalée à sa création.
+
 ## Endpoints API
 
 | Méthode | Route | Description |

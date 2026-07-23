@@ -10,7 +10,7 @@ import asyncio
 import logging
 import time
 
-from . import alert_engine, cache, config, db
+from . import alert_engine, cache, config, db, notifier
 from .hyperliquid_client import get_client
 from .models import AssetMarket
 
@@ -106,10 +106,19 @@ async def poll_once() -> dict:
 
     # Évaluation des alertes sur l'historique pré-chargé
     ctx = db.load_history_context(now_ms)
-    after_active, before_active = alert_engine.evaluate_all(assets, ctx)
+    after_active, before_active, created = alert_engine.evaluate_all(assets, ctx)
     delta = after_active - before_active
     if delta != 0:
         logger.info("Alertes: %d actives (%+d ce cycle)", after_active, delta)
+
+    # Notification des alertes créées ce cycle (no-op sans canal configuré).
+    # Après l'évaluation mais avant la maintenance : un downsampling lent ne
+    # doit pas retarder un ping critique.
+    notified: dict = {}
+    try:
+        notified = await notifier.notify_new_alerts(created)
+    except Exception:
+        logger.exception("Erreur notifications")
 
     # Métriques globales (agrégats HL + sources externes cache-ées)
     try:
@@ -126,6 +135,8 @@ async def poll_once() -> dict:
         "assets": len(assets),
         "alerts_active": after_active,
         "alerts_delta": delta,
+        "alerts_created": len(created),
+        "notified": notified,
         "maintenance": maintenance,
         "duration_ms": int((time.time() - started) * 1000),
     }

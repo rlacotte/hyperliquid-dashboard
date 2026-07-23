@@ -321,8 +321,16 @@ def evaluate_confluence(result: ConfluenceResult, w: _CycleWriter) -> None:
         )
 
 
-def evaluate_all(assets: list[AssetMarket], ctx: HistoryContext) -> tuple[int, int]:
-    """Évalue tous les critères. Retourne (alertes_actives_après, _avant)."""
+def evaluate_all(
+    assets: list[AssetMarket], ctx: HistoryContext
+) -> tuple[int, int, list[tuple]]:
+    """Évalue tous les critères.
+
+    Retourne (alertes_actives_après, _avant, alertes_créées_ce_cycle).
+    Le troisième élément alimente les notifications sortantes : seules les
+    alertes *nouvelles* méritent un ping, celles qui restent actives ont déjà
+    été signalées à leur création.
+    """
     active = db.get_active_alerts_map()
     before_active = len(active)
     writer = _CycleWriter(active, int(time.time() * 1000))
@@ -355,4 +363,4 @@ def evaluate_all(assets: list[AssetMarket], ctx: HistoryContext) -> tuple[int, i
     confluence_cache.set_confluence_scores(ctx.now_ms, confluence_results)
 
     after_active = db.count_active_alerts()
-    return after_active, before_active
+    return after_active, before_active, list(writer._inserts)

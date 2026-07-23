@@ -28,18 +28,15 @@ async def get_global_metrics():
     client = get_client()
     metrics = await global_metrics.collect_all(assets, client._client)
 
-    # Deltas vs valeurs précédentes (pour afficher la variation)
+    # Deltas vs valeurs précédentes (pour afficher la variation).
+    # Attention : les métriques CoinGecko sont imbriquées sous metrics["coingecko"],
+    # pas à la racine — on teste donc la présence de la section, pas de la clé.
     prev: dict[str, float | None] = {}
-    for metric_key in (
-        "hl_open_interest_usd",
-        "hl_volume_24h_usd",
-        "hl_avg_funding",
-        "total_marketcap_usd",
-        "btc_dominance",
-    ):
-        if metric_key in metrics:
-            latest = db.get_latest_global_metrics(metric_key)
-            prev[metric_key] = latest["value"] if latest else None
+    hl_keys = ["hl_open_interest_usd", "hl_volume_24h_usd", "hl_avg_funding"]
+    cg_keys = ["total_marketcap_usd", "btc_dominance"] if metrics.get("coingecko") else []
+    for metric_key in hl_keys + cg_keys:
+        latest = db.get_latest_global_metrics(metric_key)
+        prev[metric_key] = latest["value"] if latest else None
 
     return {**metrics, "prev": prev}
 

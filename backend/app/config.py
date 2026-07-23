@@ -90,6 +90,19 @@ CONFLUENCE_MIN_CRITERIA = int(os.getenv("CONFLUENCE_MIN_CRITERIA", "3"))
 CONFLUENCE_SCORE_WARN = float(os.getenv("CONFLUENCE_SCORE_WARN", "4.0"))
 CONFLUENCE_SCORE_CRIT = float(os.getenv("CONFLUENCE_SCORE_CRIT", "7.0"))
 
+# --- Notifications sortantes --------------------------------------------------
+# Les alertes s'affichent dans l'UI, mais personne ne regarde un dashboard à
+# 3h du matin : les nouvelles alertes sont aussi poussées vers Telegram et/ou
+# Discord. Chaque canal est actif dès que ses variables sont renseignées ;
+# sans configuration, aucune notification (no-op silencieux).
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
+# Sévérité minimale notifiée : "info" | "warning" | "critical".
+# Défaut critical : sur ~230 perps, les warnings sont trop fréquents pour
+# mériter une interruption.
+NOTIFY_MIN_SEVERITY = os.getenv("NOTIFY_MIN_SEVERITY", "critical")
+
 # --- Frontend ----------------------------------------------------------------
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
 

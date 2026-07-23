@@ -98,6 +98,19 @@ def test_oi_a_zero_n_entraine_pas_de_division_par_zero(spy):
     assert "open_interest" not in spy.inserted_criteria
 
 
+def test_evaluate_all_retourne_les_alertes_creees(spy, active_alerts):
+    """Le pipeline de notifications repose sur ce contrat : le 3e élément du
+    retour contient les alertes créées ce cycle, et uniquement celles-là."""
+    active_alerts[("ETH", "funding_rate")] = {"id": 1, "coin": "ETH", "criterion": "funding_rate"}
+    nouveau = make_asset("SOL", funding=0.002)          # créera funding_rate
+    deja_connu = make_asset("ETH", funding=0.002)       # déjà actif : rien
+    ctx = make_ctx("SOL", "ETH", vol_recent=10.0, vol_baseline=10.0)
+
+    _, _, created = alert_engine.evaluate_all([nouveau, deja_connu], ctx)
+
+    assert [(r[0], r[2]) for r in created] == [("SOL", "funding_rate")]
+
+
 def test_volume_sans_historique_suffisant_est_ignore(spy):
     """vol_recent None = un seul point dans la fenêtre : pas d'évaluation."""
     asset = make_asset("THIN", mark_px=100.0)
