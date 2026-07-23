@@ -100,6 +100,19 @@ active d'un cycle à l'autre a déjà été signalée à sa création.
 | `GET` | `/api/alerts?only_active=true&limit=100` | Liste des alertes |
 | `PATCH` | `/api/alerts/{id}/ack` | Acquitter une alerte |
 | `GET` | `/api/cron/poll` | Exécute un cycle de collecte (appelé par le cron) |
+| `GET` | `/api/replay?hours=24&step_min=10&horizons=60,240` | Backtest de la confluence sur l'historique (même bearer que le cron) |
+
+### Backtest de la confluence
+
+`/api/replay` rejoue le `compute_confluence` de production sur une grille
+d'instants passés (HistoryContext reconstruit depuis les snapshots, mêmes
+fenêtres et tolérances que le live) et mesure le rendement du prix à chaque
+horizon. Résultat : effectif, taux de réussite directionnel, moyenne et médiane
+par régime, avec les coins sans régime comme groupe témoin `none`.
+
+À lire avec les réserves listées dans la réponse (`caveats`) : rendements
+mark-to-mark sans frais, signaux consécutifs autocorrélés, fenêtres courtes
+bruitées en zone downsamplée.
 
 ## Déploiement Vercel
 

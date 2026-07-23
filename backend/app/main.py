@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -15,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import cache, config, db, poller
 from .hyperliquid_client import get_client
-from .routes import alerts, cron, global_metrics, markets
+from .routes import alerts, cron, global_metrics, markets, replay
 
 logging.basicConfig(
     level=logging.INFO,
@@ -70,6 +71,38 @@ app.include_router(markets.router)
 app.include_router(alerts.router)
 app.include_router(cron.router)
 app.include_router(global_metrics.router)
+app.include_router(replay.router)
+
+
+# --- Cache CDN sur les routes de lecture --------------------------------------
+# La donnée ne change qu'au rythme de la collecte (30 s) : servir chaque
+# visiteur depuis Postgres est du gaspillage, d'autant que l'instance est
+# partagée avec d'autres bases de production (max_connections=100). Un
+# s-maxage court fait absorber les rafales par le CDN Vercel.
+#
+# Volontairement exclus :
+#   - /api/alerts : l'acquittement doit se refléter immédiatement ;
+#   - /api/cron/* : un cache servirait une réponse au lieu de déclencher la
+#     collecte — le cron ne tournerait plus.
+_CACHE_RULES: tuple[tuple[re.Pattern, int], ...] = (
+    (re.compile(r"^/api/(markets|confluence)$"), 15),
+    (re.compile(r"^/api/global-metrics$"), 30),
+    (re.compile(r"^/api/global-metrics/history$"), 60),
+    (re.compile(r"^/api/markets/[^/]+/(candles|funding)$"), 60),
+)
+
+
+@app.middleware("http")
+async def cdn_cache_headers(request, call_next):
+    response = await call_next(request)
+    if request.method == "GET" and response.status_code == 200:
+        for pattern, ttl in _CACHE_RULES:
+            if pattern.match(request.url.path):
+                response.headers["Cache-Control"] = (
+                    f"public, s-maxage={ttl}, stale-while-revalidate=30"
+                )
+                break
+    return response
 
 
 @app.get("/api/health")
