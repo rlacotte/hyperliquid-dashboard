@@ -5,6 +5,7 @@ import { MarketsTable } from "./components/MarketsTable";
 import { AlertsPanel } from "./components/AlertsPanel";
 import { AssetDetail } from "./components/AssetDetail";
 import { GlobalMetricsBar } from "./components/GlobalMetricsBar";
+import { StatusBadge } from "./components/StatusBadge";
 
 export default function App() {
   const [selectedCoin, setSelectedCoin] = useState<string | null>(null);
@@ -53,10 +54,7 @@ export default function App() {
               {new Date(markets.data.ts).toLocaleTimeString("fr-FR")}
             </span>
           )}
-          <span className="flex items-center gap-1">
-            <span className={`h-2 w-2 rounded-full ${markets.error ? "bg-red-500" : "bg-green-500 animate-pulse"}`} />
-            {markets.error ? "Erreur" : "Live"}
-          </span>
+          <StatusBadge ts={markets.data?.ts} error={markets.error} />
         </div>
       </header>
 

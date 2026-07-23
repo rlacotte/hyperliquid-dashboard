@@ -64,11 +64,16 @@ Tous les seuils sont dans [`backend/app/config.py`](backend/app/config.py) et pe
 | `FUNDING_THRESHOLD_WARN` / `_CRIT` | `0.0005` / `0.001` | Seuils funding (0.05% / 0.1%) |
 | `OI_LOOKBACK_MIN` | `60` | Fenêtre de comparaison Open Interest |
 | `OI_PCT_THRESHOLD_WARN` / `_CRIT` | `0.10` / `0.20` | Variation OI (10% / 20%) |
-| `VOLUME_SPIKE_MULT_WARN` / `_CRIT` | `2.0` / `4.0` | Multiple volume vs moyenne |
-| `VOLUME_MIN_USD` | `50000000` | Seuil volume absolu ($50M) |
+| `VOLUME_RECENT_MIN` / `VOLUME_BASELINE_MIN` | `10` / `120` | Fenêtres du taux de volume (détection / référence) |
+| `VOLUME_SPIKE_MULT_WARN` / `_CRIT` | `3.0` / `6.0` | Multiple du taux de volume vs baseline |
+| `VOLUME_MIN_RATE_USDPS` | `5000` | Plancher de taux de volume ($/s, filtre les petits coins) |
 | `PRICE_LOOKBACK_MIN` | `60` | Fenêtre variation de prix |
 | `PRICE_PCT_THRESHOLD_WARN` / `_CRIT` | `0.05` / `0.10` | Variation prix (5% / 10%) |
-| `ALERT_DEDUP_WINDOW_SEC` | `1800` | Anti-spam alertes (30 min) |
+| `CONFLUENCE_SCORE_WARN` / `_CRIT` | `4.0` / `7.0` | Amplitude du score de confluence par sévérité |
+
+L'anti-spam des alertes ne se règle plus par fenêtre temporelle : il est
+structurel (au plus une alerte active par couple coin/critère, imposé par un
+index unique en base).
 
 ## Endpoints API
 

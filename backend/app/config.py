@@ -80,22 +80,15 @@ PRICE_LOOKBACK_MIN = int(os.getenv("PRICE_LOOKBACK_MIN", "60"))
 PRICE_PCT_THRESHOLD_WARN = float(os.getenv("PRICE_PCT_THRESHOLD_WARN", "0.05"))  # 5%
 PRICE_PCT_THRESHOLD_CRIT = float(os.getenv("PRICE_PCT_THRESHOLD_CRIT", "0.10"))   # 10%
 
-# --- Confluence (score multi-critères directionnel) -------------------------
-# Poids de chaque critère dans le score agrégé ∈ [-10, +10].
-# Le poids est multiplié par le score signé ∈ [-1, +1] du critère.
-CONFLUENCE_WEIGHT_PRICE = float(os.getenv("CONFLUENCE_WEIGHT_PRICE", "3.0"))
-CONFLUENCE_WEIGHT_VOLUME = float(os.getenv("CONFLUENCE_WEIGHT_VOLUME", "2.0"))
-CONFLUENCE_WEIGHT_OI = float(os.getenv("CONFLUENCE_WEIGHT_OI", "3.0"))
-CONFLUENCE_WEIGHT_FUNDING = float(os.getenv("CONFLUENCE_WEIGHT_FUNDING", "2.0"))
+# --- Confluence (matrice de régimes Prix x OI) -------------------------------
+# La direction et la fiabilité viennent du régime (cf. confluence._REGIMES),
+# pas de poids par critère : les anciens CONFLUENCE_WEIGHT_* ont disparu avec
+# la v1 (somme pondérée).
 # Nb minimum de critères actifs pour déclencher une alerte de confluence
 CONFLUENCE_MIN_CRITERIA = int(os.getenv("CONFLUENCE_MIN_CRITERIA", "3"))
 # Seuils d'amplitude du score agrégé (en absolu) pour la sévérité
 CONFLUENCE_SCORE_WARN = float(os.getenv("CONFLUENCE_SCORE_WARN", "4.0"))
 CONFLUENCE_SCORE_CRIT = float(os.getenv("CONFLUENCE_SCORE_CRIT", "7.0"))
-
-# Déduplication : pas de nouvelle alerte pour (coin, criterion) tant qu'une
-# alerte récente existe dans cette fenêtre (secondes)
-ALERT_DEDUP_WINDOW_SEC = int(os.getenv("ALERT_DEDUP_WINDOW_SEC", "1800"))  # 30 min
 
 # --- Frontend ----------------------------------------------------------------
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")

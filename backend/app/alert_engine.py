@@ -109,10 +109,6 @@ def _severity_from_thresholds(threshold_warn: float, threshold_crit: float, valu
     return None
 
 
-def _is_triggered(threshold_warn: float, threshold_crit: float, value: float) -> bool:
-    return abs(value) >= threshold_warn
-
-
 # --- Critère 1 : Funding rate ------------------------------------------------
 def evaluate_funding(asset: AssetMarket, w: _CycleWriter) -> None:
     funding = asset.funding
