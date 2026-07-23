@@ -3,6 +3,8 @@ import type {
   Candle,
   ConfluenceResponse,
   FundingPoint,
+  GlobalMetrics,
+  HistoryPoint,
   MarketsResponse,
 } from "./types";
 
@@ -22,6 +24,11 @@ async function getJson<T>(path: string): Promise<T> {
 
 export const api = {
   markets: () => getJson<MarketsResponse>("/api/markets"),
+  globalMetrics: () => getJson<GlobalMetrics>("/api/global-metrics"),
+  history: (metric: string, hours = 24) =>
+    getJson<{ metric: string; points: HistoryPoint[] }>(
+      `/api/global-metrics/history?metric=${metric}&hours=${hours}`
+    ),
   confluence: (minScore = 0) =>
     getJson<ConfluenceResponse>(`/api/confluence?min_score=${minScore}`),
   candles: (coin: string, interval = "1h", hours = 24) =>

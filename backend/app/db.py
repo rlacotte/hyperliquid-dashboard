@@ -132,6 +132,21 @@ def init_db() -> None:
             """
         )
 
+        # Historique des métriques globales pour sparklines
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS global_metrics_history (
+                id BIGSERIAL PRIMARY KEY,
+                ts BIGINT NOT NULL,
+                metric TEXT NOT NULL,
+                value DOUBLE PRECISION NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_gmh_metric_ts ON global_metrics_history(metric, ts)"
+        )
+
     _apply_idle_session_timeout()
 
 
@@ -510,3 +525,83 @@ def acknowledge_all() -> int:
 def count_active_alerts() -> int:
     with get_conn() as conn:
         return conn.execute("SELECT COUNT(*) AS n FROM alerts WHERE active = 1").fetchone()["n"]
+
+
+# --- Métriques globales : historique -----------------------------------------
+def insert_global_metrics_history(rows: list[tuple[int, str, float]]) -> None:
+    """rows: liste de (ts, metric, value)."""
+    if not rows:
+        return
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO global_metrics_history (ts, metric, value) VALUES (%s, %s, %s)",
+                rows,
+            )
+
+
+def get_global_metrics_history(metric: str, since_ms: int) -> list[dict]:
+    """Retourne l'historique d'une métrique depuis since_ms, trié chronologique."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT ts, value FROM global_metrics_history "
+            "WHERE metric = %s AND ts >= %s ORDER BY ts ASC",
+            (metric, since_ms),
+        ).fetchall()
+    return [{"ts": r["ts"], "value": r["value"]} for r in rows]
+
+
+def get_latest_global_metrics(metric: str) -> dict | None:
+    """Dernier point d'une métrique (pour calcul du delta)."""
+    with get_conn() as conn:
+        r = conn.execute(
+            "SELECT ts, value FROM global_metrics_history "
+            "WHERE metric = %s ORDER BY ts DESC LIMIT 1",
+            (metric,),
+        ).fetchone()
+    if r is None:
+        return None
+    return {"ts": r["ts"], "value": r["value"]}
+
+
+def downsample_global_metrics() -> int:
+    """Downsample l'historique des métriques globales (même logique que snapshots).
+
+    Renvoie le nombre de lignes supprimées.
+    """
+    import time as _time
+
+    now_ms = int(_time.time() * 1000)
+    full_res_cutoff = now_ms - config.DOWNSAMPLE_FULL_RES_SEC * 1000
+    bucket_ms = config.DOWNSAMPLE_BUCKET_SEC * 1000
+
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, ts, metric, value FROM global_metrics_history WHERE ts < %s",
+            (full_res_cutoff,),
+        ).fetchall()
+        if not rows:
+            return 0
+
+        # Garde 1 point par (metric, bucket)
+        buckets: dict[tuple[str, int], list[tuple[int, int]]] = {}
+        for r in rows:
+            bucket_start = (r["ts"] // bucket_ms) * bucket_ms
+            center = bucket_start + bucket_ms // 2
+            key = (r["metric"], bucket_start)
+            buckets.setdefault(key, []).append((abs(r["ts"] - center), r["id"]))
+
+        keep_ids = {min(cands, key=lambda x: x[0])[1] for cands in buckets.values()}
+        to_delete = [r["id"] for r in rows if r["id"] not in keep_ids]
+        if not to_delete:
+            return 0
+
+        # Batch delete
+        deleted = 0
+        BATCH = 500
+        for i in range(0, len(to_delete), BATCH):
+            chunk = to_delete[i : i + BATCH]
+            placeholders = ",".join(["%s"] * len(chunk))
+            cur = conn.execute(f"DELETE FROM global_metrics_history WHERE id IN ({placeholders})", chunk)
+            deleted += cur.rowcount
+        return deleted

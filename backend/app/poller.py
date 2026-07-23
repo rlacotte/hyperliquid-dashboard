@@ -66,17 +66,18 @@ def _maybe_run_maintenance(now_ms: int) -> dict | None:
     try:
         deleted = db.downsample_snapshots()
         purged = db.purge_old_snapshots()
+        gm_deleted = db.downsample_global_metrics()
     except Exception:
         logger.exception("Erreur maintenance BDD")
         return None
-    if deleted or purged:
+    if deleted or purged or gm_deleted:
         logger.info(
-            "Maintenance BDD: %d snapshots downsamplés, %d purgés (>%dj)",
+            "Maintenance BDD: %d snapshots downsamplés, %d purgés, %d métriques globales downsamplées",
             deleted,
             purged,
-            config.SNAPSHOT_RETENTION_SEC // 86400,
+            gm_deleted,
         )
-    return {"downsampled": deleted, "purged": purged}
+    return {"downsampled": deleted, "purged": purged, "gm_downsampled": gm_deleted}
 
 
 async def poll_once() -> dict:
@@ -109,6 +110,14 @@ async def poll_once() -> dict:
     delta = after_active - before_active
     if delta != 0:
         logger.info("Alertes: %d actives (%+d ce cycle)", after_active, delta)
+
+    # Métriques globales (agrégats HL + sources externes cache-ées)
+    try:
+        from . import global_metrics
+        gm = await global_metrics.collect_all(assets, client._client)
+        global_metrics.persist_history(gm)
+    except Exception:
+        logger.exception("Erreur collecte métriques globales")
 
     maintenance = _maybe_run_maintenance(now_ms)
 

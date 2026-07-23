@@ -82,3 +82,35 @@ export interface FundingPoint {
   time: number; // ms
   funding: number;
 }
+
+export interface FearGreed {
+  value: number; // 0-100
+  label: string; // "Extreme Fear" | "Fear" | "Neutral" | "Greed" | "Extreme Greed"
+  history: number[];
+  ts: number;
+}
+
+export interface CoinGeckoGlobal {
+  total_marketcap_usd: number;
+  btc_dominance: number;
+  eth_dominance: number;
+  total_volume_usd: number;
+  marketcap_change_24h_pct: number;
+}
+
+export interface GlobalMetrics {
+  ts: number;
+  fear_greed: FearGreed | null;
+  coingecko: CoinGeckoGlobal | null;
+  hl_open_interest_usd: number;
+  hl_volume_24h_usd: number;
+  hl_avg_funding: number;
+  hl_advance_count: number;
+  hl_decline_count: number;
+  prev: Record<string, number | null>;
+}
+
+export interface HistoryPoint {
+  t: number;
+  v: number;
+}

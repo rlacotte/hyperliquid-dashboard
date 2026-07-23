@@ -58,3 +58,30 @@ export function directionLabel(dir: string | null | undefined): string {
   if (dir === "bearish") return "Baissier";
   return "Neutre";
 }
+
+export function fmtUsdLarge(v: number): string {
+  // Marketcap, OI : formatage T/B/M
+  if (v >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
+  if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}K`;
+  return `$${v.toFixed(2)}`;
+}
+
+// Couleur de la valeur Fear & Greed (0-100)
+export function fearGreedColor(value: number): string {
+  if (value <= 25) return "text-red-400"; // Extreme Fear
+  if (value <= 45) return "text-orange-400"; // Fear
+  if (value <= 55) return "text-yellow-400"; // Neutral
+  if (value <= 75) return "text-lime-400"; // Greed
+  return "text-green-400"; // Extreme Greed
+}
+
+// Couleur de fond pour la jauge F&G (dégradé rouge→vert)
+export function fearGreedBgColor(value: number): string {
+  if (value <= 25) return "bg-red-500";
+  if (value <= 45) return "bg-orange-500";
+  if (value <= 55) return "bg-yellow-500";
+  if (value <= 75) return "bg-lime-500";
+  return "bg-green-500";
+}

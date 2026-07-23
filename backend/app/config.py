@@ -99,3 +99,13 @@ ALERT_DEDUP_WINDOW_SEC = int(os.getenv("ALERT_DEDUP_WINDOW_SEC", "1800"))  # 30 
 
 # --- Frontend ----------------------------------------------------------------
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+
+# --- Métriques globales (sources externes) -----------------------------------
+# CoinGecko : clé Demo optionnelle (https://www.coingecko.com/api/management).
+# Sans clé, on utilise l'API publique (rate limit plus bas mais suffisant).
+COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY", "")
+COINGECKO_BASE_URL = os.getenv("COINGECKO_BASE_URL", "https://api.coingecko.com/api/v3")
+FNG_BASE_URL = os.getenv("FNG_BASE_URL", "https://api.alternative.me/fng")
+# Durées de cache : la F&G est quotidienne, CoinGecko rafraîchi toutes les minutes.
+FNG_CACHE_TTL_SEC = int(os.getenv("FNG_CACHE_TTL_SEC", "3600"))       # 1h
+COINGECKO_CACHE_TTL_SEC = int(os.getenv("COINGECKO_CACHE_TTL_SEC", "60"))  # 1 min

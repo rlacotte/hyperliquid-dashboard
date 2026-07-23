@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import cache, config, db, poller
 from .hyperliquid_client import get_client
-from .routes import alerts, cron, markets
+from .routes import alerts, cron, global_metrics, markets
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,6 +69,7 @@ app.add_middleware(
 app.include_router(markets.router)
 app.include_router(alerts.router)
 app.include_router(cron.router)
+app.include_router(global_metrics.router)
 
 
 @app.get("/api/health")

@@ -4,6 +4,7 @@ import { usePolling } from "./hooks/usePolling";
 import { MarketsTable } from "./components/MarketsTable";
 import { AlertsPanel } from "./components/AlertsPanel";
 import { AssetDetail } from "./components/AssetDetail";
+import { GlobalMetricsBar } from "./components/GlobalMetricsBar";
 
 export default function App() {
   const [selectedCoin, setSelectedCoin] = useState<string | null>(null);
@@ -58,6 +59,9 @@ export default function App() {
           </span>
         </div>
       </header>
+
+      {/* Bandeau métriques globales */}
+      <GlobalMetricsBar />
 
       {/* Contenu principal */}
       <main className="flex flex-1 gap-4 overflow-hidden p-4">
