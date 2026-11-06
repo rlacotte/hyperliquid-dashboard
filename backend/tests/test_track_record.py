@@ -85,8 +85,8 @@ def test_resultat_incomplet_si_24h_pas_encore_ecoulees():
 
 
 # --- Agrégats ------------------------------------------------------------------------
-def row(criterion, sign, r1, b1=0.0, coin="ETH"):
-    return {"coin": coin, "criterion": criterion, "sign": sign, "ret_1h": r1, "btc_1h": b1,
+def row(criterion, sign, r1, b1=0.0, coin="ETH", ts=0):
+    return {"coin": coin, "ts": ts, "criterion": criterion, "sign": sign, "ret_1h": r1, "btc_1h": b1,
             "ret_4h": None, "btc_4h": None, "ret_24h": None, "btc_24h": None}
 
 
@@ -224,3 +224,27 @@ def test_lot_mixte_demande_les_bonnes_resolutions(monkeypatch):
     by_id = {r["alert_id"]: r for r in saved}
     assert by_id[1]["ret_1h"] is None and by_id[1]["ret_4h"] is not None
     assert by_id[2]["ret_1h"] is not None
+
+
+# --- Grappes : effectif effectif -------------------------------------------------
+def test_alertes_d_un_meme_coin_le_meme_jour_forment_une_seule_grappe():
+    """85 alertes d'un seul coin sur une journée = 1 observation, pas 85."""
+    rows = [row("price_change", -1, 0.05, b1=0.0, coin="SOL", ts=i * M) for i in range(85)]
+    h = tr.aggregate(rows)[0]["horizons"]["1h"]
+    assert h["n_vs_btc"] == 85
+    assert h["n_clusters"] == 1
+
+
+def test_grappes_par_coin_et_par_jour():
+    D = 86400_000
+    rows = [
+        row("volume", 0, 0.02, coin="A", ts=0),
+        row("volume", 0, 0.04, coin="A", ts=1000),      # même grappe que la précédente
+        row("volume", 0, -0.01, coin="A", ts=D + 5),    # autre jour
+        row("volume", 0, -0.03, coin="B", ts=0),        # autre coin
+    ]
+    h = tr.aggregate(rows)[0]["horizons"]["1h"]
+    assert h["n_clusters"] == 3
+    # Moyennes de grappe : +3 %, −1 %, −3 % → 1 grappe sur 3 bat le BTC.
+    assert h["p_beat_btc_clusters"] == pytest.approx(1 / 3, abs=1e-4)
+    assert h["mean_vs_btc_clusters"] == pytest.approx((0.03 - 0.01 - 0.03) / 3, abs=1e-6)

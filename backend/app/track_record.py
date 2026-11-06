@@ -146,6 +146,7 @@ def aggregate(rows: list[dict]) -> list[dict]:
                 horizons[f"{h}h"] = {"n": 0}
                 continue
             excess = [a - b for a, b in pairs]
+            clusters = _cluster_excess(items, h)
             horizons[f"{h}h"] = {
                 "n": len(rets),
                 "p_up": round(sum(1 for x in rets if x > 0) / len(rets), 4),
@@ -154,6 +155,11 @@ def aggregate(rows: list[dict]) -> list[dict]:
                 "n_vs_btc": len(excess),
                 "mean_vs_btc": round(statistics.fmean(excess), 6) if excess else None,
                 "p_beat_btc": round(sum(1 for x in excess if x > 0) / len(excess), 4) if excess else None,
+                # Statistiques par grappe (coin, jour) : c'est sur elles que
+                # porte le verdict, cf. _cluster_excess.
+                "n_clusters": len(clusters),
+                "mean_vs_btc_clusters": round(statistics.fmean(clusters), 6) if clusters else None,
+                "p_beat_btc_clusters": round(sum(1 for x in clusters if x > 0) / len(clusters), 4) if clusters else None,
             }
         out.append({
             "criterion": criterion,
@@ -163,6 +169,23 @@ def aggregate(rows: list[dict]) -> list[dict]:
             "horizons": horizons,
         })
     return out
+
+
+def _cluster_excess(items: list[dict], h: int) -> list[float]:
+    """Rendement relatif au BTC moyen par grappe (coin, jour UTC).
+
+    Les alertes successives d'un même coin le même jour décrivent le même
+    épisode : 85 alertes d'un seul coin ne sont pas 85 observations
+    indépendantes. Les traiter comme telles gonflait la significativité (un
+    « z = 2,9 » constaté sur un seul coin). Une grappe = une observation.
+    """
+    by: dict[tuple[str, int], list[float]] = {}
+    for r in items:
+        a, b = r.get(f"ret_{h}h"), r.get(f"btc_{h}h")
+        if a is None or b is None or r["coin"] == MARKET:
+            continue
+        by.setdefault((r["coin"], int(r["ts"]) // 86400_000), []).append(a - b)
+    return [statistics.fmean(v) for v in by.values()]
 
 
 # --- Orchestration (appelée par le cycle de collecte) ---------------------------

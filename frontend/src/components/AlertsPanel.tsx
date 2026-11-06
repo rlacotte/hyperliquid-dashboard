@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Alert, Criterion, Severity } from "../types";
 import { directionArrow, directionLabel, fmtScore, fmtTime } from "../format";
-import { alertSign, findGroup, MIN_SAMPLE, verdict, type TrackRecord } from "../signals";
+import { alertSign, findGroup, verdict, type TrackRecord } from "../signals";
 import { href } from "../router";
 
 interface Props {
@@ -25,15 +25,15 @@ function TrackHint({ alert, track }: { alert: Alert; track: TrackRecord | null |
   if (!track) return null;
   const g = findGroup(track, alert.criterion, alertSign(alert));
   const s = g?.horizons[HINT_HORIZON];
-  const v = verdict(s);
+  const v = verdict(s, g?.coins ?? 0);
   const tone = v.tone === "positive" ? "text-green-400/90" : v.tone === "negative" ? "text-red-400/90" : "text-gray-500";
   return (
     <a href={href("signals")} className={`mt-1.5 block text-[11px] leading-snug hover:underline ${tone}`} title="Voir le track record complet">
       {!s || !s.n_vs_btc
         ? "Historique : pas encore mesuré"
-        : s.n_vs_btc < MIN_SAMPLE
-          ? `Historique +4 h : ${s.n_vs_btc} cas, trop peu pour conclure`
-          : `Historique +4 h — ${v.text} · ${Math.round((s.p_beat_btc ?? 0) * 100)} % des ${s.n_vs_btc} cas au-dessus du BTC`}
+        : v.tone === "unknown"
+          ? `Historique +4 h : ${v.text.charAt(0).toLowerCase()}${v.text.slice(1)}`
+          : `Historique +4 h — ${v.text} · ${Math.round((s.p_beat_btc_clusters ?? 0) * 100)} % des ${s.n_clusters} épisodes au-dessus du BTC`}
     </a>
   );
 }

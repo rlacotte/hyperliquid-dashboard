@@ -3,8 +3,11 @@
  *
  * Le danger d'un track record est de faire dire aux chiffres plus qu'ils ne
  * disent. Ce module encode trois garde-fous :
- * - un écart n'est qualifié qu'au-delà d'un effectif minimal ;
- * - « significatif » suit un test binomial (z ≥ 2 contre 50 %), pas l'intuition ;
+ * - l'unité statistique est la GRAPPE (coin, jour) et non l'alerte : 85
+ *   alertes d'un seul coin décrivent quelques épisodes, pas 85 observations
+ *   indépendantes (constaté : un « z = 2,9 » sur un seul coin) ;
+ * - pas de verdict sous 3 coins distincts ni sous un nombre minimal de grappes ;
+ * - « significatif » suit un test binomial (z ≥ 2 contre 50 %) sur les grappes ;
  * - le verdict porte sur la performance RELATIVE au BTC, pour ne pas confondre
  *   le signal avec le mouvement général du marché.
  */
@@ -20,6 +23,10 @@ export interface HorizonStats {
   n_vs_btc?: number;
   mean_vs_btc?: number | null;
   p_beat_btc?: number | null;
+  /** Épisodes indépendants : grappes (coin, jour). */
+  n_clusters?: number;
+  mean_vs_btc_clusters?: number | null;
+  p_beat_btc_clusters?: number | null;
 }
 
 export interface TrackGroup {
@@ -71,6 +78,10 @@ export function findGroup(track: TrackRecord | null | undefined, criterion: stri
 
 /** En dessous, aucun verdict : la variance d'un petit échantillon domine tout. */
 export const MIN_SAMPLE = 30;
+/** Épisodes indépendants minimum (grappes coin × jour). */
+export const MIN_CLUSTERS = 20;
+/** Un résultat porté par un ou deux coins n'est pas généralisable. */
+export const MIN_COINS = 3;
 
 /** z d'un test binomial d'une proportion contre 50 %. */
 export function binomialZ(p: number, n: number): number {
@@ -90,18 +101,24 @@ export interface Verdict {
  * sous-performé le BTC »), pas ce qu'il faudrait faire. Une même mesure se lit
  * différemment selon la stratégie (suivre ou prendre à contre-pied).
  */
-export function verdict(h: HorizonStats | undefined): Verdict {
-  if (!h || !h.n_vs_btc || h.p_beat_btc === null || h.p_beat_btc === undefined || h.mean_vs_btc === null || h.mean_vs_btc === undefined) {
+export function verdict(h: HorizonStats | undefined, coins: number): Verdict {
+  const n = h?.n_clusters ?? 0;
+  const p = h?.p_beat_btc_clusters;
+  const mean = h?.mean_vs_btc_clusters;
+  if (!h || !h.n_vs_btc || !n || p === null || p === undefined || mean === null || mean === undefined) {
     return { tone: "unknown", text: "Pas encore de mesure", significant: false };
   }
-  if (h.n_vs_btc < MIN_SAMPLE) {
-    return { tone: "unknown", text: `Échantillon trop faible (${h.n_vs_btc})`, significant: false };
+  if (coins < MIN_COINS) {
+    return { tone: "unknown", text: `Concentré sur ${coins} coin${coins > 1 ? "s" : ""} : non généralisable`, significant: false };
   }
-  const z = binomialZ(h.p_beat_btc, h.n_vs_btc);
+  if (n < MIN_CLUSTERS) {
+    return { tone: "unknown", text: `Trop peu d'épisodes indépendants (${n})`, significant: false };
+  }
+  const z = binomialZ(p, n);
   const significant = Math.abs(z) >= 2;
   if (!significant) return { tone: "neutral", text: "Pas d'écart mesurable avec le marché", significant };
-  const pct = `${h.mean_vs_btc >= 0 ? "+" : ""}${(h.mean_vs_btc * 100).toFixed(2)} %`;
-  return h.p_beat_btc > 0.5
-    ? { tone: "positive", text: `Surperforme le BTC (${pct} en moyenne)`, significant }
-    : { tone: "negative", text: `Sous-performe le BTC (${pct} en moyenne)`, significant };
+  const pct = `${mean >= 0 ? "+" : ""}${(mean * 100).toFixed(2)} %`;
+  return p > 0.5
+    ? { tone: "positive", text: `Surperforme le BTC (${pct} par épisode)`, significant }
+    : { tone: "negative", text: `Sous-performe le BTC (${pct} par épisode)`, significant };
 }

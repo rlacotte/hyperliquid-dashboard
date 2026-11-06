@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alertSign, binomialZ, MIN_SAMPLE, signalLabel, verdict } from "./signals";
+import { alertSign, binomialZ, MIN_CLUSTERS, signalLabel, verdict } from "./signals";
 
 describe("sens d'une alerte (miroir du backend)", () => {
   it("prix et OI : signe de la variation", () => {
@@ -21,32 +21,43 @@ describe("sens d'une alerte (miroir du backend)", () => {
 });
 
 describe("verdict", () => {
-  it("rien à dire sous l'effectif minimal, même avec un écart énorme", () => {
-    const v = verdict({ n: 10, n_vs_btc: MIN_SAMPLE - 1, p_beat_btc: 0.95, mean_vs_btc: 0.05 });
+  const h = (over: Record<string, number | null>) => ({ n: 500, n_vs_btc: 500, p_beat_btc: 0.5, mean_vs_btc: 0, ...over });
+
+  it("le piège corrigé : beaucoup d'alertes d'un seul coin ne donnent AUCUN verdict", () => {
+    // Cas constaté : 85 alertes, 1 coin, « z = 2,9 » si on les croit indépendantes.
+    const v = verdict(h({ n_vs_btc: 85, n_clusters: 40, p_beat_btc_clusters: 0.8, mean_vs_btc_clusters: 0.05 }), 1);
     expect(v.tone).toBe("unknown");
-    expect(v.significant).toBe(false);
+    expect(v.text).toContain("non généralisable");
   });
 
-  it("55 % sur 100 cas n'est PAS significatif (z = 1)", () => {
-    expect(binomialZ(0.55, 100)).toBeCloseTo(1, 9);
-    expect(verdict({ n: 100, n_vs_btc: 100, p_beat_btc: 0.55, mean_vs_btc: 0.002 }).tone).toBe("neutral");
+  it("trop peu d'épisodes indépendants, même avec beaucoup d'alertes", () => {
+    const v = verdict(h({ n_clusters: MIN_CLUSTERS - 1, p_beat_btc_clusters: 0.9, mean_vs_btc_clusters: 0.03 }), 10);
+    expect(v.tone).toBe("unknown");
+    expect(v.text).toContain("épisodes");
   });
 
-  it("60 % sur 400 cas est significatif (z = 4)", () => {
-    const v = verdict({ n: 400, n_vs_btc: 400, p_beat_btc: 0.6, mean_vs_btc: 0.004 });
+  it("le test porte sur les grappes, pas sur les alertes brutes", () => {
+    // 60 % sur 400 ALERTES serait significatif (z = 4) ; sur 25 grappes, non (z = 1).
+    expect(binomialZ(0.6, 25)).toBeCloseTo(1, 9);
+    const v = verdict(h({ n_vs_btc: 400, p_beat_btc: 0.6, n_clusters: 25, p_beat_btc_clusters: 0.6, mean_vs_btc_clusters: 0.01 }), 8);
+    expect(v.tone).toBe("neutral");
+  });
+
+  it("surperformance significative sur assez d'épisodes et de coins", () => {
+    const v = verdict(h({ n_clusters: 100, p_beat_btc_clusters: 0.65, mean_vs_btc_clusters: 0.004 }), 12);
     expect(v.significant).toBe(true);
     expect(v.tone).toBe("positive");
     expect(v.text).toContain("+0.40 %");
   });
 
   it("sous-performance significative", () => {
-    const v = verdict({ n: 400, n_vs_btc: 400, p_beat_btc: 0.38, mean_vs_btc: -0.006 });
+    const v = verdict(h({ n_clusters: 100, p_beat_btc_clusters: 0.35, mean_vs_btc_clusters: -0.006 }), 12);
     expect(v.tone).toBe("negative");
     expect(v.text).toContain("-0.60 %");
   });
 
   it("pas de comparaison possible (alertes BTC uniquement)", () => {
-    expect(verdict({ n: 50, n_vs_btc: 0, p_beat_btc: null, mean_vs_btc: null }).tone).toBe("unknown");
+    expect(verdict({ n: 50, n_vs_btc: 0, p_beat_btc: null, mean_vs_btc: null }, 1).tone).toBe("unknown");
   });
 });
 

@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { usePolling } from "../hooks/usePolling";
-import { signalLabel, verdict, MIN_SAMPLE, type HorizonKey, type TrackGroup } from "../signals";
+import { signalLabel, verdict, MIN_CLUSTERS, MIN_COINS, type HorizonKey, type TrackGroup } from "../signals";
 import { colorPct } from "../format";
 import { InfoTip } from "../components/InfoTip";
 
@@ -50,8 +50,9 @@ export function SignalsPage() {
             donc le coin au BTC sur la même fenêtre.
           </li>
           <li>
-            <span className="text-gray-300">Prudence statistique</span> : aucun verdict sous {MIN_SAMPLE} cas ; « significatif » signifie un test binomial à
-            z ≥ 2. Les alertes successives d'un même coin ne sont pas indépendantes : l'effectif réel est plus faible qu'affiché.
+            <span className="text-gray-300">Prudence statistique</span> : les alertes d'un même coin le même jour décrivent un seul épisode — le verdict porte
+            sur ces épisodes (grappes coin × jour), pas sur le nombre brut d'alertes. Aucun verdict sous {MIN_CLUSTERS} épisodes ni sous {MIN_COINS} coins
+            distincts ; « significatif » signifie un test binomial à z ≥ 2 sur les épisodes.
           </li>
           <li>Source : bougies Hyperliquid, indépendantes des interruptions passées de notre collecte. Rattrapage progressif de l'historique.</li>
         </ul>
@@ -75,6 +76,7 @@ export function SignalsPage() {
                 <Th help="Plus robuste que la moyenne aux mouvements extrêmes.">Médian</Th>
                 <Th help="Rendement du coin moins celui du BTC sur la même fenêtre : ce que le signal apporte au-delà du marché.">vs BTC</Th>
                 <Th help="Part des cas où le coin a fait mieux que le BTC.">Bat le BTC</Th>
+                <Th help="Épisodes indépendants : alertes regroupées par coin et par jour. C'est l'effectif réel du test.">Épisodes</Th>
                 <Th align="left" last>
                   Verdict
                 </Th>
@@ -94,7 +96,7 @@ export function SignalsPage() {
 
 function GroupRow({ g, h }: { g: TrackGroup; h: HorizonKey }) {
   const s = g.horizons[h] ?? { n: 0 };
-  const v = verdict(s);
+  const v = verdict(s, g.coins);
   const tone =
     v.tone === "positive" ? "text-green-400" : v.tone === "negative" ? "text-red-400" : v.tone === "neutral" ? "text-gray-300" : "text-gray-600";
   return (
@@ -113,6 +115,7 @@ function GroupRow({ g, h }: { g: TrackGroup; h: HorizonKey }) {
         {pct(s.mean_vs_btc)}
       </td>
       <td className="px-3 py-2 text-right tabular-nums text-gray-300">{share(s.p_beat_btc)}</td>
+      <td className="px-3 py-2 text-right tabular-nums text-gray-400">{s.n_clusters ?? "—"}</td>
       <td className={`px-3 py-2 text-xs ${tone}`}>
         {v.significant && <span className="mr-1">●</span>}
         {v.text}
