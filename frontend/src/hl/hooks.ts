@@ -54,19 +54,26 @@ export function useLiveMids(dex = ""): Record<string, number> {
  *
  * Les ids HIP-3 sont déjà préfixés ("xyz:TSLA"), les ids du DEX principal ne
  * le sont pas : aucune collision possible à la fusion. Les mises à jour sont
- * regroupées par frame d'animation — avec une dizaine de DEX qui poussent
+ * regroupées sur une courte fenêtre — avec une dizaine de DEX qui poussent
  * chacun leur dictionnaire, re-rendre le tableau à chaque message serait du
  * travail jeté.
+ *
+ * Minuteur et PAS requestAnimationFrame : constaté en direct, rAF peut rester
+ * suspendu alors que la page se déclare `visible` (fenêtre masquée par une
+ * autre, vue intégrée). Les prix restaient alors figés sans aucun signal.
+ * Une donnée ne doit pas dépendre du compositing.
  */
+const MIDS_BATCH_MS = 100;
+
 export function useLiveMidsAll(dexs: string[]): Record<string, number> {
   const [mids, setMids] = useState<Record<string, number>>({});
   const key = [...dexs].sort().join(",");
 
   useEffect(() => {
     const pending: Record<string, number> = {};
-    let frame: number | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const flush = () => {
-      frame = null;
+      timer = null;
       const batch = { ...pending };
       for (const k in pending) delete pending[k];
       setMids((prev) => ({ ...prev, ...batch }));
@@ -80,14 +87,14 @@ export function useLiveMidsAll(dexs: string[]): Record<string, number> {
         const v = parseFloat(data.mids[k]);
         if (Number.isFinite(v)) pending[k] = v;
       }
-      if (frame === null) frame = requestAnimationFrame(flush);
+      if (timer === null) timer = setTimeout(flush, MIDS_BATCH_MS);
     };
     const unsubs = key.split(",").map((dex) =>
       wsManager.subscribe(dex ? { type: "allMids", dex } : { type: "allMids" }, onData)
     );
     return () => {
       unsubs.forEach((u) => u());
-      if (frame !== null) cancelAnimationFrame(frame);
+      if (timer !== null) clearTimeout(timer);
     };
   }, [key]);
 

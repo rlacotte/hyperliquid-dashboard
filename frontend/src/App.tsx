@@ -10,10 +10,13 @@ import { MarketsPage } from "./pages/MarketsPage";
 import { FundingPage } from "./pages/FundingPage";
 import { WalletPage } from "./pages/WalletPage";
 import { TapePage } from "./pages/TapePage";
+import { SmartMoneyPage } from "./pages/SmartMoneyPage";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 const NAV: NavItem[] = [
   { page: "markets", label: "Marchés" },
   { page: "tape", label: "Flux live" },
+  { page: "smart-money", label: "Smart money" },
   { page: "funding", label: "Funding" },
   { page: "wallet", label: "Wallet" },
 ];
@@ -39,19 +42,27 @@ export default function App() {
       </header>
 
       <StaleBanner ws={ws} signalsTs={signalsTs} signalsError={health.error} />
-      <GlobalMetricsBar />
+      <ErrorBoundary resetKey="metrics">
+        <GlobalMetricsBar />
+      </ErrorBoundary>
 
-      {/* Les sections non encore construites retombent sur les marchés : un
-          lien partagé vers une section future ne doit jamais afficher une page vide. */}
-      {route.page === "funding" ? (
-        <FundingPage />
-      ) : route.page === "wallet" ? (
-        <WalletPage address={route.params[0]} />
-      ) : route.page === "tape" ? (
-        <TapePage />
-      ) : (
-        <MarketsPage />
-      )}
+      {/* Une barrière par page : une erreur dans une section laisse l'en-tête
+          et la navigation utilisables. Elle est réinitialisée au changement de page. */}
+      <ErrorBoundary resetKey={`${route.page}/${route.params.join("/")}`}>
+        {route.page === "funding" ? (
+          <FundingPage />
+        ) : route.page === "wallet" ? (
+          <WalletPage address={route.params[0]} />
+        ) : route.page === "tape" ? (
+          <TapePage />
+        ) : route.page === "smart-money" ? (
+          <SmartMoneyPage />
+        ) : (
+          // Les sections inconnues retombent sur les marchés : un lien partagé
+          // ne doit jamais afficher une page vide.
+          <MarketsPage />
+        )}
+      </ErrorBoundary>
     </div>
   );
 }

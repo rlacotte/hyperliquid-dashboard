@@ -128,6 +128,15 @@ async def poll_once() -> dict:
     except Exception:
         logger.exception("Erreur collecte métriques globales")
 
+    # Leaderboard distillé : au plus toutes les 30 min (fetch de ~39 Mo).
+    # Placé après les alertes : un téléchargement lent ne doit jamais les retarder.
+    leaderboard_info = None
+    try:
+        from . import leaderboard
+        leaderboard_info = await leaderboard.maybe_refresh(client._client, now_ms)
+    except Exception:
+        logger.exception("Erreur leaderboard")
+
     maintenance = _maybe_run_maintenance(now_ms)
 
     return {
@@ -137,6 +146,7 @@ async def poll_once() -> dict:
         "alerts_delta": delta,
         "alerts_created": len(created),
         "notified": notified,
+        "leaderboard": leaderboard_info,
         "maintenance": maintenance,
         "duration_ms": int((time.time() - started) * 1000),
     }

@@ -27,6 +27,13 @@ export const api = {
   health: () =>
     getJson<{ status: string; last_fetch_ms: number; assets_count: number; poll_interval_sec: number }>("/api/health"),
   globalMetrics: () => getJson<GlobalMetrics>("/api/global-metrics"),
+  leaderboard: () =>
+    getJson<{
+      ts: number;
+      total: number;
+      rows: import("./smartmoney").LeaderRow[];
+      snapshots: { days: number; since: string | null };
+    }>("/api/leaderboard"),
   history: (metric: string, hours = 24) =>
     getJson<{ metric: string; points: HistoryPoint[] }>(
       `/api/global-metrics/history?metric=${metric}&hours=${hours}`

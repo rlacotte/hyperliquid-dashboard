@@ -147,6 +147,26 @@ def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_gmh_metric_ts ON global_metrics_history(metric, ts)"
         )
 
+        # Photo quotidienne du haut du leaderboard. Sert à mesurer la
+        # persistance des performances (un top trader le reste-t-il ?), ce qui
+        # exige un historique qu'aucune API ne fournit : on l'accumule.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
+                day DATE NOT NULL,
+                address TEXT NOT NULL,
+                account_value DOUBLE PRECISION NOT NULL,
+                pnl_week DOUBLE PRECISION NOT NULL,
+                pnl_month DOUBLE PRECISION NOT NULL,
+                pnl_all DOUBLE PRECISION NOT NULL,
+                roi_month DOUBLE PRECISION NOT NULL,
+                vlm_month DOUBLE PRECISION NOT NULL,
+                profile TEXT NOT NULL,
+                PRIMARY KEY (day, address)
+            )
+            """
+        )
+
     _apply_idle_session_timeout()
 
 
@@ -525,6 +545,37 @@ def acknowledge_all() -> int:
 def count_active_alerts() -> int:
     with get_conn() as conn:
         return conn.execute("SELECT COUNT(*) AS n FROM alerts WHERE active = 1").fetchone()["n"]
+
+
+# --- Leaderboard : photos quotidiennes ----------------------------------------
+def insert_leaderboard_snapshot(day: str, rows: list[dict]) -> int:
+    """Insère la photo du jour (idempotent : une seule photo par jour et adresse).
+
+    rows : lignes distillées (clés compactes, cf. leaderboard.distill).
+    """
+    if not rows:
+        return 0
+    payload = [
+        (day, r["a"], r["av"], r["pw"], r["pm"], r["pa"], r["rm"], r["vm"], r["pr"])
+        for r in rows
+    ]
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO leaderboard_snapshots "
+                "(day, address, account_value, pnl_week, pnl_month, pnl_all, roi_month, vlm_month, profile) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                payload,
+            )
+            return cur.rowcount
+
+
+def leaderboard_snapshot_days() -> list[str]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT day FROM leaderboard_snapshots ORDER BY day"
+        ).fetchall()
+    return [r["day"].isoformat() for r in rows]
 
 
 # --- Métriques globales : historique -----------------------------------------
