@@ -24,6 +24,8 @@ async function getJson<T>(path: string): Promise<T> {
 
 export const api = {
   markets: () => getJson<MarketsResponse>("/api/markets"),
+  health: () =>
+    getJson<{ status: string; last_fetch_ms: number; assets_count: number; poll_interval_sec: number }>("/api/health"),
   globalMetrics: () => getJson<GlobalMetrics>("/api/global-metrics"),
   history: (metric: string, hours = 24) =>
     getJson<{ metric: string; points: HistoryPoint[] }>(

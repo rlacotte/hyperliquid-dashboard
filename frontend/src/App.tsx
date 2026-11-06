@@ -1,112 +1,41 @@
-import { useCallback, useState } from "react";
 import { api } from "./api";
 import { usePolling } from "./hooks/usePolling";
-import { MarketsTable } from "./components/MarketsTable";
-import { AlertsPanel } from "./components/AlertsPanel";
-import { AssetDetail } from "./components/AssetDetail";
+import { useWsStatus } from "./hl/hooks";
+import { useRoute } from "./router";
+import { Nav, type NavItem } from "./components/Nav";
 import { GlobalMetricsBar } from "./components/GlobalMetricsBar";
 import { StatusBadge } from "./components/StatusBadge";
 import { StaleBanner } from "./components/StaleBanner";
+import { MarketsPage } from "./pages/MarketsPage";
+
+const NAV: NavItem[] = [{ page: "markets", label: "Marchés" }];
 
 export default function App() {
-  const [selectedCoin, setSelectedCoin] = useState<string | null>(null);
-
-  const markets = usePolling(() => api.markets(), 5000);
-  const alerts = usePolling(() => api.alerts(100, true), 5000);
-  const confluence = usePolling(() => api.confluence(0), 5000);
-
-  const handleAck = useCallback(async (id: number) => {
-    try {
-      await api.ackAlert(id);
-      alerts.refresh();
-    } catch (e) {
-      console.error(e);
-    }
-  }, [alerts]);
-
-  const handleAckAll = useCallback(async () => {
-    try {
-      await api.ackAll();
-      alerts.refresh();
-    } catch (e) {
-      console.error(e);
-    }
-  }, [alerts]);
-
-  const selectedAsset = selectedCoin
-    ? markets.data?.assets.find((a) => a.coin === selectedCoin)
-    : undefined;
-
-  const selectedConfluence = selectedCoin
-    ? confluence.data?.scores.find((s) => s.coin === selectedCoin)
-    : undefined;
+  const route = useRoute();
+  const ws = useWsStatus();
+  // Fraîcheur des SIGNAUX (cycle de collecte serveur), distincte de celle des
+  // prix qui arrivent en direct par websocket.
+  const health = usePolling(() => api.health(), 15_000);
+  const signalsTs = health.data?.last_fetch_ms || undefined;
 
   return (
     <div className="flex h-screen flex-col">
-      {/* Header */}
-      <header className="flex items-center gap-3 border-b border-bg-border bg-bg-panel px-6 py-3">
-        <h1 className="text-lg font-bold text-white">
+      <header className="flex items-center gap-4 border-b border-bg-border bg-bg-panel px-6 py-2.5">
+        <a href="#/markets" className="shrink-0 text-lg font-bold text-white">
           <span className="text-blue-500">⚡</span> Hyperliquid Dashboard
-        </h1>
-        <div className="ml-auto flex items-center gap-4 text-xs text-gray-500">
-          {markets.data && (
-            <span>
-              {markets.data.assets.length} actifs · Maj{" "}
-              {new Date(markets.data.ts).toLocaleTimeString("fr-FR")}
-            </span>
-          )}
-          <StatusBadge ts={markets.data?.ts} error={markets.error} />
+        </a>
+        <Nav items={NAV} current={route.page} />
+        <div className="ml-auto">
+          <StatusBadge ws={ws} signalsTs={signalsTs} signalsError={health.error} />
         </div>
       </header>
 
-      {/* Bandeau d'alerte : visible uniquement quand la donnée n'est plus fiable */}
-      <StaleBanner ts={markets.data?.ts} error={markets.error} />
-
-      {/* Bandeau métriques globales */}
+      <StaleBanner ws={ws} signalsTs={signalsTs} signalsError={health.error} />
       <GlobalMetricsBar />
 
-      {/* Contenu principal */}
-      <main className="flex flex-1 gap-4 overflow-hidden p-4">
-        {/* Table des marchés */}
-        <div className="flex-1 overflow-hidden">
-          {markets.error && !markets.data ? (
-            <div className="flex h-full items-center justify-center text-red-400">
-              Erreur: {markets.error}
-            </div>
-          ) : markets.loading && !markets.data ? (
-            <div className="flex h-full items-center justify-center text-gray-500">
-              Chargement des marchés...
-            </div>
-          ) : markets.data ? (
-            <MarketsTable
-              assets={markets.data.assets}
-              confluenceScores={confluence.data?.scores ?? []}
-              onSelectCoin={setSelectedCoin}
-              selectedCoin={selectedCoin}
-            />
-          ) : null}
-        </div>
-
-        {/* Panneau d'alertes */}
-        <aside className="w-80 shrink-0 overflow-hidden">
-          <AlertsPanel
-            alerts={alerts.data ?? []}
-            onAck={handleAck}
-            onAckAll={handleAckAll}
-            onSelectCoin={setSelectedCoin}
-          />
-        </aside>
-      </main>
-
-      {/* Modal détail actif */}
-      {selectedCoin && (
-        <AssetDetail
-          coin={selectedCoin}
-          asset={selectedAsset}
-          confluence={selectedConfluence}
-          onClose={() => setSelectedCoin(null)}
-        />
-      )}
+      {/* Les sections non encore construites retombent sur les marchés : un
+          lien partagé vers une section future ne doit jamais afficher une page vide. */}
+      <MarketsPage />
     </div>
   );
 }

@@ -25,6 +25,22 @@ export function fmtFunding(v: number): string {
   return `${sign}${(v * 100).toFixed(4)}%`;
 }
 
+/**
+ * Annualise un taux de funding.
+ * Hyperliquid paie toutes les heures, Binance et Bybit toutes les 4 ou 8 h :
+ * comparer des taux bruts mélange des périodes différentes. L'APR remet tout
+ * sur la même échelle.
+ */
+export function fundingApr(rate: number, intervalHours = 1): number {
+  return (rate / intervalHours) * 24 * 365;
+}
+
+export function fmtApr(apr: number): string {
+  const sign = apr >= 0 ? "+" : "";
+  const pct = apr * 100;
+  return `${sign}${Math.abs(pct) >= 100 ? pct.toFixed(0) : pct.toFixed(1)}%`;
+}
+
 export function fmtTime(ts: number): string {
   return new Date(ts).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
