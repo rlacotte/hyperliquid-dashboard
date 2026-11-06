@@ -7,8 +7,12 @@ import { GlobalMetricsBar } from "./components/GlobalMetricsBar";
 import { StatusBadge } from "./components/StatusBadge";
 import { StaleBanner } from "./components/StaleBanner";
 import { MarketsPage } from "./pages/MarketsPage";
+import { FundingPage } from "./pages/FundingPage";
 
-const NAV: NavItem[] = [{ page: "markets", label: "Marchés" }];
+const NAV: NavItem[] = [
+  { page: "markets", label: "Marchés" },
+  { page: "funding", label: "Funding" },
+];
 
 export default function App() {
   const route = useRoute();
@@ -35,7 +39,7 @@ export default function App() {
 
       {/* Les sections non encore construites retombent sur les marchés : un
           lien partagé vers une section future ne doit jamais afficher une page vide. */}
-      <MarketsPage />
+      {route.page === "funding" ? <FundingPage /> : <MarketsPage />}
     </div>
   );
 }
