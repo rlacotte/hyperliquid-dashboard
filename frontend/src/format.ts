@@ -14,6 +14,21 @@ export function fmtUsd(v: number): string {
   return `$${v.toFixed(2)}`;
 }
 
+/** Montant signé compact : +$1.20M, -$88.0K. fmtUsd ne gère pas les négatifs. */
+export function fmtUsdSigned(v: number): string {
+  const sign = v > 0 ? "+" : v < 0 ? "-" : "";
+  return `${sign}${fmtUsd(Math.abs(v))}`;
+}
+
+/** Âge relatif court : « 12 s », « 4 min », « 3 h », « 2 j ». */
+export function fmtAgo(ts: number, now = Date.now()): string {
+  const s = Math.max(0, Math.floor((now - ts) / 1000));
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.floor(s / 60)} min`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h`;
+  return `${Math.floor(s / 86400)} j`;
+}
+
 export function fmtPct(v: number): string {
   const sign = v >= 0 ? "+" : "";
   return `${sign}${(v * 100).toFixed(2)}%`;

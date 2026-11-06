@@ -223,6 +223,46 @@ export const hl = {
   candles: (coin: string, interval: string, startTime: number, endTime = Date.now()) =>
     info<RawCandle[]>({ type: "candleSnapshot", req: { coin, interval, startTime, endTime } }),
 
+  /**
+   * État de marge sur TOUS les DEX : un compte a un état séparé par DEX HIP-3,
+   * et ses positions xyz:TSLA n'apparaissent pas dans l'état du DEX principal.
+   * Poids : 2 par DEX.
+   */
+  allClearinghouseStates: async (user: string): Promise<{ dex: string; state: ClearinghouseState }[]> => {
+    const dexs = ["", ...(await hl.dexNames())];
+    const results = await Promise.allSettled(dexs.map((d) => hl.clearinghouseState(user, d)));
+    return results.flatMap((r, i) => (r.status === "fulfilled" ? [{ dex: dexs[i], state: r.value }] : []));
+  },
+
+  userFunding: (user: string, startTime: number, endTime = Date.now()) =>
+    info<{ time: number; hash: string; delta: { type: string; coin: string; usdc: string; szi: string; fundingRate: string } }[]>({
+      type: "userFunding",
+      user,
+      startTime,
+      endTime,
+    }),
+
+  /**
+   * Paiements de funding paginés sur une fenêtre.
+   *
+   * L'API renvoie au plus 500 lignes en partant du DÉBUT de la fenêtre : pour un
+   * compte à 29 positions, 7 jours demandés n'en couvrent que 18 h. Chaque page
+   * pèse ~45 (20 + 1 par tranche de 20 lignes) sur un budget de 1200/min : on
+   * s'arrête à `maxPages` et on signale la couverture partielle plutôt que de
+   * vider le quota du visiteur.
+   */
+  userFundingPaged: async (user: string, startTime: number, endTime: number, maxPages = 6) => {
+    const entries: Awaited<ReturnType<typeof hl.userFunding>> = [];
+    let cursor = startTime;
+    for (let page = 0; page < maxPages; page++) {
+      const batch = await hl.userFunding(user, cursor, endTime);
+      entries.push(...batch);
+      if (batch.length < 500) return { entries, complete: true };
+      cursor = batch[batch.length - 1].time + 1;
+    }
+    return { entries, complete: false };
+  },
+
   fundingHistory: (coin: string, startTime: number, endTime = Date.now()) =>
     info<{ coin: string; fundingRate: string; premium: string; time: number }[]>({
       type: "fundingHistory",

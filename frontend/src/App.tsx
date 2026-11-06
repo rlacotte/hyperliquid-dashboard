@@ -8,10 +8,14 @@ import { StatusBadge } from "./components/StatusBadge";
 import { StaleBanner } from "./components/StaleBanner";
 import { MarketsPage } from "./pages/MarketsPage";
 import { FundingPage } from "./pages/FundingPage";
+import { WalletPage } from "./pages/WalletPage";
+import { TapePage } from "./pages/TapePage";
 
 const NAV: NavItem[] = [
   { page: "markets", label: "Marchés" },
+  { page: "tape", label: "Flux live" },
   { page: "funding", label: "Funding" },
+  { page: "wallet", label: "Wallet" },
 ];
 
 export default function App() {
@@ -39,7 +43,15 @@ export default function App() {
 
       {/* Les sections non encore construites retombent sur les marchés : un
           lien partagé vers une section future ne doit jamais afficher une page vide. */}
-      {route.page === "funding" ? <FundingPage /> : <MarketsPage />}
+      {route.page === "funding" ? (
+        <FundingPage />
+      ) : route.page === "wallet" ? (
+        <WalletPage address={route.params[0]} />
+      ) : route.page === "tape" ? (
+        <TapePage />
+      ) : (
+        <MarketsPage />
+      )}
     </div>
   );
 }
