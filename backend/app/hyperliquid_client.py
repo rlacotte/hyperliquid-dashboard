@@ -16,19 +16,42 @@ from . import config
 logger = logging.getLogger(__name__)
 
 
+# Erreurs de transport qui justifient UNE relance : la requête n'a pas abouti
+# côté serveur, la rejouer est sans risque (lecture seule).
+_RETRYABLE = (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout)
+
+# Durée de vie d'une connexion inactive dans le pool.
+#
+# En serverless, l'instance est gelée entre deux cycles (60 s). Le serveur
+# distant ferme entre-temps la connexion keep-alive ; au réveil, httpx
+# réutilisait une socket morte → « Server disconnected without sending a
+# response », constaté en production à chaque cycle ou presque. Une expiration
+# de quelques secondes garde la réutilisation AU SEIN d'un cycle (requêtes
+# enchaînées) sans jamais réveiller une connexion d'un cycle précédent.
+_KEEPALIVE_EXPIRY_SEC = 5.0
+
+
 class HyperliquidClient:
     def __init__(self) -> None:
         self._client = httpx.AsyncClient(
             base_url=config.HYPERLIQUID_API_URL,
             timeout=config.HTTP_TIMEOUT_SEC,
             headers={"Content-Type": "application/json"},
+            limits=httpx.Limits(keepalive_expiry=_KEEPALIVE_EXPIRY_SEC),
         )
 
     async def aclose(self) -> None:
         await self._client.aclose()
 
     async def _post_info(self, body: dict[str, Any]) -> Any:
-        resp = await self._client.post("/info", json=body)
+        try:
+            resp = await self._client.post("/info", json=body)
+        except _RETRYABLE as exc:
+            # Une seule relance, sur une connexion neuve : une panne réelle doit
+            # toujours remonter, mais une socket morte ne doit pas coûter un cycle.
+            logger.warning("Hyperliquid %s (%s) : relance", body.get("type"), type(exc).__name__)
+            await asyncio.sleep(0.5)
+            resp = await self._client.post("/info", json=body)
         resp.raise_for_status()
         return resp.json()
 
