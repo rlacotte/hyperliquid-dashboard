@@ -195,6 +195,20 @@ def init_db() -> None:
         # 1 h n'est pas mesurable et ne doit pas rester « en attente ».
         conn.execute("ALTER TABLE alert_outcomes ADD COLUMN IF NOT EXISTS resolution_min INTEGER NOT NULL DEFAULT 15")
 
+        # Témoin du track record : rendement à 24 h relatif au BTC de chaque coin
+        # alerté, pour CHAQUE jour ordinaire couvert par ses bougies. Sert à dire
+        # si un coin fait mieux ou moins bien que d'habitude après une alerte.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS baseline_days (
+                coin TEXT NOT NULL,
+                day INTEGER NOT NULL,
+                excess_24h DOUBLE PRECISION NOT NULL,
+                PRIMARY KEY (coin, day)
+            )
+            """
+        )
+
         # Migration unique : avant la double résolution, les alertes de plus de
         # ~52 jours étaient tentées en bougies de 15 min (indisponibles si loin)
         # et épuisaient leurs tentatives sans mesure. On les réarme une fois ;
@@ -709,6 +723,41 @@ def alert_outcomes_rows(lookback_days: int) -> list[dict]:
             "SELECT coin, ts, criterion, severity, sign, ret_1h, ret_4h, ret_24h, btc_1h, btc_4h, btc_24h "
             "FROM alert_outcomes WHERE ts > %s AND (ret_1h IS NOT NULL OR ret_4h IS NOT NULL)",
             (since,),
+        ).fetchall()
+
+
+def insert_baseline_days(rows: list[tuple[str, int, float]]) -> None:
+    """rows : (coin, jour epoch, rendement 24 h − BTC). Idempotent."""
+    if not rows:
+        return
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO baseline_days (coin, day, excess_24h) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
+                rows,
+            )
+
+
+def coins_missing_baseline(limit: int) -> list[dict]:
+    """Coins déjà mesurés mais sans aucun jour témoin, avec la plage de leurs alertes."""
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            SELECT o.coin, MIN(o.ts) AS lo, MAX(o.ts) AS hi
+            FROM alert_outcomes o
+            WHERE NOT EXISTS (SELECT 1 FROM baseline_days b WHERE b.coin = o.coin)
+            GROUP BY o.coin
+            ORDER BY MIN(o.ts)
+            LIMIT %s
+            """,
+            (limit,),
+        ).fetchall()
+
+
+def baseline_rows(since_day: int) -> list[dict]:
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT coin, day, excess_24h FROM baseline_days WHERE day >= %s", (since_day,)
         ).fetchall()
 
 

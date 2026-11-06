@@ -54,6 +54,11 @@ export function SignalsPage() {
             sur ces épisodes (grappes coin × jour), pas sur le nombre brut d'alertes. Aucun verdict sous {MIN_CLUSTERS} épisodes ni sous {MIN_COINS} coins
             distincts ; « significatif » signifie un test binomial à z ≥ 2 sur les épisodes.
           </li>
+          <li>
+            <span className="text-gray-300">Témoin (24 h)</span> : les alertes se déclenchent surtout sur des altcoins volatils, qui peuvent sous-performer
+            le BTC en général. Le verdict compare donc les épisodes d'alerte aux jours ordinaires des mêmes coins sur la même période (test de deux
+            proportions). Les horizons 1 h et 4 h n'ont pas encore de témoin : leur verdict ne compare qu'au BTC et le signale.
+          </li>
           <li>Source : bougies Hyperliquid, indépendantes des interruptions passées de notre collecte. Rattrapage progressif de l'historique.</li>
         </ul>
       </section>
@@ -77,6 +82,9 @@ export function SignalsPage() {
                 <Th help="Rendement du coin moins celui du BTC sur la même fenêtre : ce que le signal apporte au-delà du marché.">vs BTC</Th>
                 <Th help="Part des cas où le coin a fait mieux que le BTC.">Bat le BTC</Th>
                 <Th help="Épisodes indépendants : alertes regroupées par coin et par jour. C'est l'effectif réel du test.">Épisodes</Th>
+                <Th help="Horizon 24 h : part des jours ORDINAIRES où ces mêmes coins ont battu le BTC sur la même période. C'est la référence du verdict.">
+                  Témoin
+                </Th>
                 <Th align="left" last>
                   Verdict
                 </Th>
@@ -116,6 +124,9 @@ function GroupRow({ g, h }: { g: TrackGroup; h: HorizonKey }) {
       </td>
       <td className="px-3 py-2 text-right tabular-nums text-gray-300">{share(s.p_beat_btc)}</td>
       <td className="px-3 py-2 text-right tabular-nums text-gray-400">{s.n_clusters ?? "—"}</td>
+      <td className="px-3 py-2 text-right tabular-nums text-gray-400" title={s.baseline_n ? `${s.baseline_n} jours ordinaires` : undefined}>
+        {s.baseline_p_beat !== undefined ? share(s.baseline_p_beat) : "—"}
+      </td>
       <td className={`px-3 py-2 text-xs ${tone}`}>
         {v.significant && <span className="mr-1">●</span>}
         {v.text}

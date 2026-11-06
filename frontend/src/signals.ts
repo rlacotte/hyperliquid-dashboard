@@ -27,6 +27,14 @@ export interface HorizonStats {
   n_clusters?: number;
   mean_vs_btc_clusters?: number | null;
   p_beat_btc_clusters?: number | null;
+  /**
+   * Témoin (horizon 24 h) : jours ordinaires des mêmes coins sur la même
+   * période. Sans lui, une « sous-performance » peut n'être que la dérive
+   * générale des altcoins face au BTC.
+   */
+  baseline_n?: number;
+  baseline_p_beat?: number;
+  baseline_mean?: number;
 }
 
 export interface TrackGroup {
@@ -83,6 +91,14 @@ export const MIN_CLUSTERS = 20;
 /** Un résultat porté par un ou deux coins n'est pas généralisable. */
 export const MIN_COINS = 3;
 
+/** z d'un test de deux proportions (groupe contre témoin). */
+export function twoProportionZ(p1: number, n1: number, p2: number, n2: number): number {
+  if (n1 <= 0 || n2 <= 0) return 0;
+  const p = (p1 * n1 + p2 * n2) / (n1 + n2);
+  const se = Math.sqrt(p * (1 - p) * (1 / n1 + 1 / n2));
+  return se > 0 ? (p1 - p2) / se : 0;
+}
+
 /** z d'un test binomial d'une proportion contre 50 %. */
 export function binomialZ(p: number, n: number): number {
   return n > 0 ? (p - 0.5) / Math.sqrt(0.25 / n) : 0;
@@ -114,11 +130,25 @@ export function verdict(h: HorizonStats | undefined, coins: number): Verdict {
   if (n < MIN_CLUSTERS) {
     return { tone: "unknown", text: `Trop peu d'épisodes indépendants (${n})`, significant: false };
   }
+  const share = (x: number) => `${Math.round(x * 100)} %`;
+
+  // Avec témoin : la bonne question est « mieux ou moins bien que d'habitude ? »
+  if (h.baseline_n && h.baseline_n >= MIN_SAMPLE && h.baseline_p_beat !== undefined) {
+    const z = twoProportionZ(p, n, h.baseline_p_beat, h.baseline_n);
+    const significant = Math.abs(z) >= 2;
+    const detail = `${share(p)} des épisodes battent le BTC, contre ${share(h.baseline_p_beat)} les jours ordinaires`;
+    if (!significant) return { tone: "neutral", text: `Comme d'habitude — ${detail}`, significant };
+    return p > h.baseline_p_beat
+      ? { tone: "positive", text: `Mieux que d'habitude — ${detail}`, significant }
+      : { tone: "negative", text: `Moins bien que d'habitude — ${detail}`, significant };
+  }
+
+  // Sans témoin (horizons 1 h, 4 h) : comparaison au BTC seul, signalée comme telle.
   const z = binomialZ(p, n);
   const significant = Math.abs(z) >= 2;
-  if (!significant) return { tone: "neutral", text: "Pas d'écart mesurable avec le marché", significant };
+  if (!significant) return { tone: "neutral", text: "Pas d'écart mesurable avec le BTC (sans témoin)", significant };
   const pct = `${mean >= 0 ? "+" : ""}${(mean * 100).toFixed(2)} %`;
   return p > 0.5
-    ? { tone: "positive", text: `Surperforme le BTC (${pct} par épisode)`, significant }
-    : { tone: "negative", text: `Sous-performe le BTC (${pct} par épisode)`, significant };
+    ? { tone: "positive", text: `Surperforme le BTC (${pct} par épisode, sans témoin)`, significant }
+    : { tone: "negative", text: `Sous-performe le BTC (${pct} par épisode, sans témoin)`, significant };
 }

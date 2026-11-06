@@ -14,7 +14,8 @@ interface Props {
 }
 
 /** Horizon de référence pour le bilan affiché sous chaque alerte. */
-const HINT_HORIZON = "4h" as const;
+/** 24 h : le seul horizon doté d'un témoin (jours ordinaires des mêmes coins). */
+const HINT_HORIZON = "24h" as const;
 
 /**
  * Le bilan historique du TYPE de l'alerte, sous l'alerte elle-même. C'est ce que
@@ -32,8 +33,8 @@ function TrackHint({ alert, track }: { alert: Alert; track: TrackRecord | null |
       {!s || !s.n_vs_btc
         ? "Historique : pas encore mesuré"
         : v.tone === "unknown"
-          ? `Historique +4 h : ${v.text.charAt(0).toLowerCase()}${v.text.slice(1)}`
-          : `Historique +4 h — ${v.text} · ${Math.round((s.p_beat_btc_clusters ?? 0) * 100)} % des ${s.n_clusters} épisodes au-dessus du BTC`}
+          ? `Historique +24 h : ${v.text.charAt(0).toLowerCase()}${v.text.slice(1)}`
+          : `Historique +24 h — ${v.text} (${s.n_clusters} épisodes)`}
     </a>
   );
 }

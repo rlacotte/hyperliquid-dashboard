@@ -116,11 +116,38 @@ def outcome(candles: list[tuple[int, float]], market: list[tuple[int, float]], t
     return out
 
 
+DAY_MS = 86400_000
+
+
+def baseline_from_candles(coin: str, candles: list[tuple[int, float]], market: list[tuple[int, float]], res: dict) -> list[tuple[str, int, float]]:
+    """Rendement à 24 h relatif au BTC pour chaque jour (00:00 UTC) couvert.
+
+    C'est le TÉMOIN : sur la période, ces coins battent-ils le BTC d'habitude ?
+    Sans lui, une sous-performance après alerte peut n'être que la faiblesse
+    générale des altcoins (constaté : presque tous les types d'alertes
+    « sous-performaient » le BTC, à la hausse comme à la baisse).
+    """
+    if coin == MARKET or not candles or not market:
+        return []
+    cms = res["ms"]
+    first = (candles[0][0] // DAY_MS + 1) * DAY_MS
+    last = candles[-1][0] - DAY_MS
+    out = []
+    t = first
+    while t <= last:
+        p0, p1 = open_after(candles, t, cms), open_after(candles, t + DAY_MS, cms)
+        m0, m1 = open_after(market, t, cms), open_after(market, t + DAY_MS, cms)
+        if p0 and p1 and m0 and m1:
+            out.append((coin, t // DAY_MS, (p1 / p0 - 1) - (m1 / m0 - 1)))
+        t += DAY_MS
+    return out
+
+
 def resolution_for(ts: int, now_ms: int) -> dict:
     return FINE if now_ms - ts < FINE_MAX_AGE_MS else COARSE
 
 
-def aggregate(rows: list[dict]) -> list[dict]:
+def aggregate(rows: list[dict], baseline: list[dict] | None = None) -> list[dict]:
     """Statistiques par (critère, sens) et par horizon.
 
     Pour chaque groupe : effectif, part des hausses, rendement moyen et médian,
@@ -161,6 +188,8 @@ def aggregate(rows: list[dict]) -> list[dict]:
                 "mean_vs_btc_clusters": round(statistics.fmean(clusters), 6) if clusters else None,
                 "p_beat_btc_clusters": round(sum(1 for x in clusters if x > 0) / len(clusters), 4) if clusters else None,
             }
+        if baseline:
+            horizons["24h"].update(_matched_baseline(items, baseline))
         out.append({
             "criterion": criterion,
             "sign": sign,
@@ -169,6 +198,27 @@ def aggregate(rows: list[dict]) -> list[dict]:
             "horizons": horizons,
         })
     return out
+
+
+def _matched_baseline(items: list[dict], baseline: list[dict]) -> dict:
+    """Témoin apparié : jours ordinaires des MÊMES coins sur la MÊME période,
+    hors jours d'alerte du groupe."""
+    coins = {r["coin"] for r in items}
+    days = [int(r["ts"]) // DAY_MS for r in items]
+    lo, hi = min(days), max(days)
+    alert_days = {(r["coin"], int(r["ts"]) // DAY_MS) for r in items}
+    sample = [
+        b["excess_24h"]
+        for b in baseline
+        if b["coin"] in coins and lo <= b["day"] <= hi and (b["coin"], b["day"]) not in alert_days
+    ]
+    if not sample:
+        return {"baseline_n": 0}
+    return {
+        "baseline_n": len(sample),
+        "baseline_p_beat": round(sum(1 for x in sample if x > 0) / len(sample), 4),
+        "baseline_mean": round(statistics.fmean(sample), 6),
+    }
 
 
 def _cluster_excess(items: list[dict], h: int) -> list[float]:
@@ -197,7 +247,7 @@ async def maybe_process(client, now_ms: int | None = None) -> dict | None:
 
     pending = db.pending_alert_outcomes(now_ms, [h * 3600_000 + COARSE["ms"] for h in HORIZONS_H], LOOKBACK_DAYS)
     if not pending:
-        return {"processed": 0}
+        return await _backfill_baseline(client, now_ms)
 
     by_coin: dict[str, list[dict]] = {}
     for p in pending:
@@ -222,16 +272,38 @@ async def maybe_process(client, now_ms: int | None = None) -> dict | None:
     market = {iv: await _candles(client, MARKET, iv, lo, hi) for iv, (lo, hi) in ranges.items()}
 
     results = []
+    baseline: list[tuple[str, int, float]] = []
     for (coin, interval), items in groups.items():
         res = res_by_interval[interval]
         lo, hi = ranges[interval]
         candles = market[interval] if coin == MARKET else await _candles(client, coin, interval, lo, hi)
         for p in items:
             results.append({**p, **outcome(candles, market[interval], p["ts"], res)})
+        baseline.extend(baseline_from_candles(coin, candles, market[interval], res))
 
     db.upsert_alert_outcomes(results, now_ms)
+    db.insert_baseline_days(baseline)
     logger.info("Track record : %d alertes sur %s", len(results), ",".join(coins))
     return {"processed": len(results), "coins": coins, "pending": len(pending)}
+
+
+async def _backfill_baseline(client, now_ms: int) -> dict:
+    """Une fois les alertes à jour : calcule le témoin des coins mesurés avant
+    son introduction. Bougies d'1 h (assez pour des fenêtres de 24 h, et
+    disponibles sur toute la plage)."""
+    todo = [c for c in db.coins_missing_baseline(COINS_PER_PASS) if c["coin"] != MARKET]
+    if not todo:
+        return {"processed": 0}
+    lo = min(c["lo"] for c in todo) - DAY_MS
+    hi = min(max(c["hi"] for c in todo) + 2 * DAY_MS, now_ms)
+    market = await _candles(client, MARKET, COARSE["interval"], lo, hi)
+    rows: list[tuple[str, int, float]] = []
+    for c in todo:
+        candles = await _candles(client, c["coin"], COARSE["interval"], c["lo"] - DAY_MS, min(c["hi"] + 2 * DAY_MS, now_ms))
+        rows.extend(baseline_from_candles(c["coin"], candles, market, COARSE))
+    db.insert_baseline_days(rows)
+    logger.info("Témoin : %d jours pour %s", len(rows), ",".join(c["coin"] for c in todo))
+    return {"processed": 0, "baseline_days": len(rows), "coins": [c["coin"] for c in todo]}
 
 
 async def _candles(client, coin: str, interval: str, lo: int, hi: int) -> list[tuple[int, float]]:
@@ -241,4 +313,12 @@ async def _candles(client, coin: str, interval: str, lo: int, hi: int) -> list[t
 
 def summary() -> dict:
     rows = db.alert_outcomes_rows(LOOKBACK_DAYS)
-    return {"groups": aggregate(rows), "outcomes": len(rows), "horizons_h": list(HORIZONS_H), "lookback_days": LOOKBACK_DAYS}
+    since_day = (int(time.time() * 1000) - LOOKBACK_DAYS * DAY_MS) // DAY_MS
+    baseline = db.baseline_rows(since_day)
+    return {
+        "groups": aggregate(rows, baseline),
+        "outcomes": len(rows),
+        "baseline_days": len(baseline),
+        "horizons_h": list(HORIZONS_H),
+        "lookback_days": LOOKBACK_DAYS,
+    }

@@ -145,6 +145,7 @@ def test_lot_borne_et_resultats_enregistres(monkeypatch):
     monkeypatch.setattr(tr.db, "try_claim", lambda *a: True)
     monkeypatch.setattr(tr.db, "pending_alert_outcomes", lambda *a: pending)
     monkeypatch.setattr(tr.db, "upsert_alert_outcomes", lambda rows, ts: saved.extend(rows))
+    monkeypatch.setattr(tr.db, "insert_baseline_days", lambda rows: None)
     client = FakeClient()
 
     info = asyncio.run(tr.maybe_process(client, now))
@@ -173,6 +174,7 @@ def test_le_marche_n_est_pas_telecharge_deux_fois(monkeypatch):
     monkeypatch.setattr(tr.db, "try_claim", lambda *a: True)
     monkeypatch.setattr(tr.db, "pending_alert_outcomes", lambda *a: pending)
     monkeypatch.setattr(tr.db, "upsert_alert_outcomes", lambda rows, ts: None)
+    monkeypatch.setattr(tr.db, "insert_baseline_days", lambda rows: None)
     client = FakeClient()
     asyncio.run(tr.maybe_process(client, now))
     assert client.calls == ["BTC"]
@@ -214,6 +216,7 @@ def test_lot_mixte_demande_les_bonnes_resolutions(monkeypatch):
     monkeypatch.setattr(tr.db, "try_claim", lambda *a: True)
     monkeypatch.setattr(tr.db, "pending_alert_outcomes", lambda *a: pending)
     monkeypatch.setattr(tr.db, "upsert_alert_outcomes", lambda rows, ts: saved.extend(rows))
+    monkeypatch.setattr(tr.db, "insert_baseline_days", lambda rows: None)
     client = FakeClient()
     asyncio.run(tr.maybe_process(client, now))
 
@@ -248,3 +251,53 @@ def test_grappes_par_coin_et_par_jour():
     # Moyennes de grappe : +3 %, −1 %, −3 % → 1 grappe sur 3 bat le BTC.
     assert h["p_beat_btc_clusters"] == pytest.approx(1 / 3, abs=1e-4)
     assert h["mean_vs_btc_clusters"] == pytest.approx((0.03 - 0.01 - 0.03) / 3, abs=1e-6)
+
+
+# --- Témoin ------------------------------------------------------------------------
+D = 86400_000
+
+
+def test_temoin_un_point_par_jour_complet():
+    # Coin +2 %/jour, BTC +1 %/jour → excès ≈ +1 % chaque jour.
+    hourly_coin = [(i * H, 100 * (1.02 ** (i / 24))) for i in range(24 * 5)]
+    hourly_btc = [(i * H, 100 * (1.01 ** (i / 24))) for i in range(24 * 5)]
+    rows = tr.baseline_from_candles("ETH", hourly_coin, hourly_btc, tr.COARSE)
+    # 5 jours de bougies → jours 1, 2, 3 complets (le jour 0 démarre à t=0 mais
+    # le premier minuit pris est le suivant ; le dernier doit avoir 24 h après lui).
+    assert [d for _, d, _ in rows] == [1, 2, 3]
+    assert all(abs(x - 0.01) < 1e-3 for _, _, x in rows)
+
+
+def test_pas_de_temoin_pour_le_btc_lui_meme():
+    hourly = [(i * H, 100.0) for i in range(24 * 4)]
+    assert tr.baseline_from_candles("BTC", hourly, hourly, tr.COARSE) == []
+
+
+def test_temoin_apparie_memes_coins_meme_periode_hors_jours_d_alerte():
+    items = [
+        {"coin": "A", "ts": 10 * D + 5, "ret_24h": 0.0, "btc_24h": 0.0},
+        {"coin": "A", "ts": 12 * D + 5, "ret_24h": 0.0, "btc_24h": 0.0},
+    ]
+    baseline = [
+        {"coin": "A", "day": 10, "excess_24h": 0.9},   # jour d'alerte : exclu
+        {"coin": "A", "day": 11, "excess_24h": 0.02},  # retenu
+        {"coin": "A", "day": 13, "excess_24h": 0.5},   # hors période : exclu
+        {"coin": "B", "day": 11, "excess_24h": -0.4},  # autre coin : exclu
+    ]
+    m = tr._matched_baseline(items, baseline)
+    assert m == {"baseline_n": 1, "baseline_p_beat": 1.0, "baseline_mean": 0.02}
+
+
+def test_rattrapage_du_temoin_quand_les_alertes_sont_a_jour(monkeypatch):
+    now = 300 * D
+    stored = []
+    monkeypatch.setattr(tr.db, "try_claim", lambda *a: True)
+    monkeypatch.setattr(tr.db, "pending_alert_outcomes", lambda *a: [])
+    monkeypatch.setattr(tr.db, "coins_missing_baseline", lambda limit: [{"coin": "SOL", "lo": 200 * D, "hi": 205 * D}])
+    monkeypatch.setattr(tr.db, "insert_baseline_days", lambda rows: stored.extend(rows))
+    client = FakeClient()
+    info = asyncio.run(tr.maybe_process(client, now))
+    assert info["coins"] == ["SOL"]
+    assert info["baseline_days"] > 0
+    assert {i for _, i in client.intervals} == {"1h"}
+    assert all(r[0] == "SOL" for r in stored)
