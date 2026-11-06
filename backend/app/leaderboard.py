@@ -31,7 +31,9 @@ logger = logging.getLogger(__name__)
 
 LEADERBOARD_URL = "https://stats-data.hyperliquid.xyz/Mainnet/leaderboard"
 KV_KEY = "leaderboard"
-REFRESH_EVERY_SEC = 30 * 60
+# Toutes les 2 h : le classement bouge lentement, et chaque rafraîchissement
+# coûte ~0,4 s de CPU (parse de 39 Mo) sur un quota Vercel Hobby de 4 h/mois.
+REFRESH_EVERY_SEC = 2 * 3600
 SNAPSHOT_KEY = "leaderboard_snapshot_day"
 CLAIM_KEY = "leaderboard_refresh_claim"
 CLAIM_TTL_SEC = 3 * 60

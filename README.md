@@ -131,13 +131,25 @@ vercel --prod
 Les critères d'alerte comparent l'état courant à l'historique des 10 à 120
 dernières minutes : **sans collecte régulière, aucune alerte ne se déclenche.**
 
-Le plan **Hobby** ne déclenche les crons Vercel qu'une fois par jour, ce qui est
-insuffisant. Le dépôt fournit donc [`.github/workflows/poll.yml`](.github/workflows/poll.yml),
-qui appelle `/api/cron/poll` toutes les 30 s. Il attend deux secrets de dépôt :
-`DASHBOARD_URL` et `CRON_SECRET`.
+Le plan **Hobby** ne déclenche les crons Vercel qu'une fois par jour. La collecte
+est donc déclenchée **chaque minute par une Scaleway Serverless Function**
+(CRON), cf. [`infra/scaleway-pinger/`](infra/scaleway-pinger/README.md) — dans le
+palier gratuit Scaleway.
 
-Sur un plan **Pro**, supprimer ce workflow et passer le `schedule` de
-[`vercel.json`](vercel.json) à `* * * * *` : le cron natif suffit.
+Pourquoi pas GitHub Actions : sur 1 000 déclenchements mesurés, le cron demandé
+toutes les 5 min a tiré avec un écart médian de 53 min (6 % de couverture), et
+GitHub désactive les workflows planifiés après 60 jours sans activité. Le
+workflow [`.github/workflows/poll.yml`](.github/workflows/poll.yml) reste
+disponible en **déclenchement manuel** comme roue de secours.
+
+Pourquoi une minute et pas 30 s : chaque cycle s'exécute sur Vercel, dont le
+plan Hobby plafonne durement le CPU actif à 4 h/mois (au-delà, le site cesse de
+servir). ~45 ms de CPU mesurés par cycle ; à 1 cycle/min la marge reste
+confortable. La route `/api/cron/poll` écarte d'elle-même tout appel arrivant
+moins de 40 s après le précédent (réservation atomique en base).
+
+Sur un plan **Pro**, le cron natif de [`vercel.json`](vercel.json) peut passer
+à `* * * * *` et remplacer la fonction Scaleway.
 
 ## Architecture
 

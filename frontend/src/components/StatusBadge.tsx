@@ -42,7 +42,7 @@ export function StatusBadge({ ws, signalsTs, signalsError }: Props) {
       </span>
       <span
         className="flex items-center gap-1.5"
-        title={signalsError ?? "Alertes et régimes, recalculés à chaque cycle de collecte serveur (~30 s)"}
+        title={signalsError ?? "Alertes et régimes, recalculés à chaque cycle de collecte serveur (chaque minute)"}
       >
         <span className={`h-2 w-2 rounded-full ${sigView.dot}`} />
         <span className={sigView.text}>Signaux {sigView.label}</span>

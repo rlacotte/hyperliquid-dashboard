@@ -1,82 +1,63 @@
-# Déclencheur de collecte.
+# Collecte de secours, déclenchée À LA MAIN uniquement.
 #
-# Le plan Vercel Hobby ne déclenche les crons qu'une fois par jour, ce qui est
-# insuffisant : les critères d'alerte comparent l'état courant à l'historique
-# des 10 à 120 dernières minutes, donc sans collecte régulière aucune alerte ne
-# peut se déclencher. Ce workflow appelle l'endpoint de collecte à la place.
+# Le déclencheur principal est une Scaleway Serverless Function appelée chaque
+# minute par un CRON (cf. infra/scaleway-pinger/). Ce workflow l'a précédé et a
+# été déclassé après mesure : sur 1 000 déclenchements planifiés (juillet →
+# septembre 2026), le cron GitHub demandé toutes les 5 min a tiré avec un écart
+# médian de 53 min et jusqu'à 12,5 h — 6 % de couverture effective. GitHub
+# désactive en outre les workflows planifiés après 60 jours sans activité sur le
+# dépôt (collecte arrêtée six semaines sans bruit). Et un cron permanent de
+# service de production n'est pas l'usage prévu de GitHub Actions.
 #
-# Robustesse — deux pannes réelles ont façonné ce fichier :
-#
-# 1. GitHub planifie « au mieux » : déclenchements retardés de plusieurs
-#    minutes, parfois sautés. L'ancienne version (run de 5 min toutes les 5 min)
-#    créait un trou à chaque raté. Ici : planifié toutes les 20 min, chaque run
-#    collecte 40 min. Le groupe de concurrence garde au plus un run actif et un
-#    en attente : un déclenchement manqué est absorbé par le chevauchement.
-#
-# 2. GitHub DÉSACTIVE un workflow planifié après 60 jours sans activité sur le
-#    dépôt. La collecte s'est arrêtée ainsi six semaines sans bruit. Chaque run
-#    se réactive donc lui-même via l'API (méthode de l'action keepalive-workflow
-#    v2, sans commits factices). Le bandeau « collecte arrêtée » du dashboard
-#    reste le filet de sécurité si ce mécanisme venait à échouer.
+# Usage : onglet Actions → poll-hyperliquid → Run workflow, si la fonction
+# Scaleway est en panne. Collecte chaque minute pendant la durée choisie. La
+# route serveur écarte d'elle-même les doublons (< 40 s), il n'y a donc aucun
+# risque à le lancer pendant que la fonction tourne.
 #
 # Prérequis — deux secrets de dépôt :
 #   DASHBOARD_URL : https://<projet>.vercel.app
 #   CRON_SECRET   : identique à la variable d'environnement Vercel
-#
-# Dépôt public : minutes Actions gratuites et illimitées sur les runners standard.
-# En passant sur un plan Vercel Pro, supprimer ce fichier et remplacer le
-# schedule de vercel.json par "* * * * *".
 name: poll-hyperliquid
 
 on:
-  schedule:
-    - cron: "*/20 * * * *"
   workflow_dispatch:
+    inputs:
+      minutes:
+        description: "Durée de collecte (minutes, max 340)"
+        default: "60"
+        required: true
 
 concurrency:
   group: poll-hyperliquid
   cancel-in-progress: false
 
-permissions:
-  actions: write # pour se réactiver soi-même (keepalive)
-
 jobs:
   poll:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 350
     steps:
-      - name: Keepalive (empêche la désactivation après 60 j d'inactivité)
-        # Un échec ici ne doit jamais empêcher la collecte.
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/poll.yml/enable"
-
-      - name: Collecte toutes les 30 s pendant 40 min
+      - name: Collecte chaque minute
         env:
           DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          MINUTES: ${{ inputs.minutes }}
         run: |
           set -u
-          deadline=$(( $(date +%s) + 40 * 60 ))
+          minutes=$(( MINUTES > 340 ? 340 : MINUTES ))
+          deadline=$(( $(date +%s) + minutes * 60 ))
           i=0; ok=0
           while [ "$(date +%s)" -lt "$deadline" ]; do
             i=$((i + 1))
             started=$(date +%s)
-            code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
-              --max-time 60 \
+            code=$(curl -sS -o /tmp/out.json -w '%{http_code}' --max-time 60 \
               -H "Authorization: Bearer ${CRON_SECRET}" \
+              -H "X-Pinger: github-manual:${GITHUB_RUN_ID}:${i}" \
               "${DASHBOARD_URL}/api/cron/poll" || echo "000")
             [ "$code" = "200" ] && ok=$((ok + 1))
-            echo "cycle $i -> HTTP $code $(head -c 200 /tmp/out.json 2>/dev/null || true)"
-            # Cadence de 30 s mesurée de début à début : un `sleep 30` fixe
-            # après un cycle de 5-8 s donnait en réalité ~36 s.
+            echo "cycle $i -> HTTP $code $(head -c 160 /tmp/out.json 2>/dev/null || true)"
             elapsed=$(( $(date +%s) - started ))
-            wait=$(( 30 - elapsed ))
+            wait=$(( 60 - elapsed ))
             if [ "$wait" -gt 0 ]; then sleep "$wait"; fi
           done
           echo "terminé : $ok/$i cycles réussis"
-          # Un cycle raté isolé ne fait pas échouer le run (la collecte suivante
-          # repartira d'un historique un peu plus creux), mais un run sans aucun
-          # succès doit apparaître en rouge dans l'onglet Actions.
           if [ "$ok" -eq 0 ]; then exit 1; fi

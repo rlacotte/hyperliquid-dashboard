@@ -26,7 +26,7 @@ export default function App() {
   const ws = useWsStatus();
   // Fraîcheur des SIGNAUX (cycle de collecte serveur), distincte de celle des
   // prix qui arrivent en direct par websocket.
-  const health = usePolling(() => api.health(), 15_000);
+  const health = usePolling(() => api.health(), 30_000);
   const signalsTs = health.data?.last_fetch_ms || undefined;
 
   return (

@@ -87,9 +87,12 @@ app.include_router(leaderboard.router)
 #     collecte — le cron ne tournerait plus.
 _CACHE_RULES: tuple[tuple[re.Pattern, int], ...] = (
     (re.compile(r"^/api/(markets|confluence)$"), 15),
+    # Interrogé par chaque visiteur pour la pastille « Signaux » : 10 s de
+    # cache partagé suffisent face à une collecte par minute.
+    (re.compile(r"^/api/health$"), 10),
     (re.compile(r"^/api/global-metrics$"), 30),
     (re.compile(r"^/api/global-metrics/history$"), 60),
-    # Rafraîchi au plus toutes les 30 min côté serveur.
+    # Rafraîchi au plus toutes les 2 h côté serveur.
     (re.compile(r"^/api/leaderboard$"), 300),
     (re.compile(r"^/api/markets/[^/]+/(candles|funding)$"), 60),
 )

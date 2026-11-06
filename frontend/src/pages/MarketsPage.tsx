@@ -25,7 +25,7 @@ export function MarketsPage() {
 
   // Signaux calculés côté serveur (historique nécessaire)
   const confluence = usePolling(() => api.confluence(0), 15_000);
-  const alerts = usePolling(() => api.alerts(100, true), 10_000);
+  const alerts = usePolling(() => api.alerts(100, true), 15_000);
 
   const confluenceById = useMemo(() => {
     const m = new Map<string, ConfluenceScore>();

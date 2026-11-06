@@ -10,6 +10,8 @@ from app import db
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(db, "init_db", lambda: None)
+    import app.config as _config
+    monkeypatch.setattr(_config, "RUN_POLLER", False)
     monkeypatch.setattr(db, "get_global_metrics_history", lambda metric, since_ms: [])
     monkeypatch.setattr(db, "get_alerts", lambda **kw: [])
 
@@ -43,6 +45,7 @@ def test_le_cron_n_est_jamais_cache(client, monkeypatch):
 
     monkeypatch.setattr(poller, "poll_once", fake_poll)
     monkeypatch.setattr(config, "CRON_SECRET", "")  # route ouverte pour le test
+    monkeypatch.setattr(db, "try_claim", lambda *a: True)
     resp = client.get("/api/cron/poll")
     assert resp.status_code == 200
     assert "s-maxage" not in resp.headers.get("cache-control", "")

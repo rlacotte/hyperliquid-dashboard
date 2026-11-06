@@ -19,7 +19,7 @@ HTTP_TIMEOUT_SEC = float(os.getenv("HTTP_TIMEOUT_SEC", "15"))
 
 # --- Polling -----------------------------------------------------------------
 # Cadence de collecte des données marché (metaAndAssetCtxs + allMids)
-POLL_INTERVAL_SEC = float(os.getenv("POLL_INTERVAL_SEC", "30"))
+POLL_INTERVAL_SEC = float(os.getenv("POLL_INTERVAL_SEC", "60"))
 
 # --- Base de données ---------------------------------------------------------
 # Postgres. En local comme sur Vercel, la même variable pointe la base.

@@ -210,6 +210,26 @@ def kv_get(key: str) -> tuple[int, Any] | None:
     return row["ts"], row["value"]
 
 
+def try_claim(key: str, now_ms: int, min_interval_ms: int) -> bool:
+    """Réservation ATOMIQUE d'un créneau : vrai si personne ne l'a prise depuis
+    `min_interval_ms`.
+
+    Un seul aller-retour, sans fenêtre de course : l'UPSERT ne met à jour la
+    ligne que si l'ancienne réservation est expirée, et RETURNING ne renvoie
+    rien sinon. Deux appels simultanés ne peuvent donc pas réussir tous les deux
+    — contrairement à un « lire puis écrire » en deux temps.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            "INSERT INTO kv (key, ts, value) VALUES (%(k)s, %(now)s, '{}'::jsonb) "
+            "ON CONFLICT (key) DO UPDATE SET ts = EXCLUDED.ts "
+            "WHERE kv.ts <= %(threshold)s "
+            "RETURNING ts",
+            {"k": key, "now": now_ms, "threshold": now_ms - min_interval_ms},
+        ).fetchone()
+    return row is not None
+
+
 # --- Snapshots ---------------------------------------------------------------
 def insert_snapshots(rows: Iterable[tuple]) -> None:
     """rows: iterable de (coin, ts, mark_px, funding, open_interest, day_ntl_vlm)"""

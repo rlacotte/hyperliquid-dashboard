@@ -128,7 +128,7 @@ async def poll_once() -> dict:
     except Exception:
         logger.exception("Erreur collecte métriques globales")
 
-    # Leaderboard distillé : au plus toutes les 30 min (fetch de ~39 Mo).
+    # Leaderboard distillé : au plus toutes les 2 h (fetch de ~39 Mo).
     # Placé après les alertes : un téléchargement lent ne doit jamais les retarder.
     leaderboard_info = None
     try:
