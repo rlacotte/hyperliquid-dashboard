@@ -6,6 +6,7 @@ import { AlertsPanel } from "./components/AlertsPanel";
 import { AssetDetail } from "./components/AssetDetail";
 import { GlobalMetricsBar } from "./components/GlobalMetricsBar";
 import { StatusBadge } from "./components/StatusBadge";
+import { StaleBanner } from "./components/StaleBanner";
 
 export default function App() {
   const [selectedCoin, setSelectedCoin] = useState<string | null>(null);
@@ -57,6 +58,9 @@ export default function App() {
           <StatusBadge ts={markets.data?.ts} error={markets.error} />
         </div>
       </header>
+
+      {/* Bandeau d'alerte : visible uniquement quand la donnée n'est plus fiable */}
+      <StaleBanner ts={markets.data?.ts} error={markets.error} />
 
       {/* Bandeau métriques globales */}
       <GlobalMetricsBar />
