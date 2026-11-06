@@ -50,7 +50,13 @@ def active_alerts() -> dict:
 
 
 @pytest.fixture
-def spy(monkeypatch, active_alerts) -> DbSpy:
+def recently_resolved() -> dict:
+    """Alertes terminées récemment (refroidissement). À peupler si besoin."""
+    return {}
+
+
+@pytest.fixture
+def spy(monkeypatch, active_alerts, recently_resolved) -> DbSpy:
     s = DbSpy()
 
     def insert_alerts_bulk(rows):
@@ -69,6 +75,7 @@ def spy(monkeypatch, active_alerts) -> DbSpy:
         return len(rows)
 
     monkeypatch.setattr(db, "get_active_alerts_map", lambda: dict(active_alerts))
+    monkeypatch.setattr(db, "get_recently_resolved_map", lambda since: dict(recently_resolved))
     monkeypatch.setattr(db, "insert_alerts_bulk", insert_alerts_bulk)
     monkeypatch.setattr(db, "resolve_alerts_bulk", resolve_alerts_bulk)
     monkeypatch.setattr(db, "update_confluence_alerts_bulk", update_confluence_alerts_bulk)

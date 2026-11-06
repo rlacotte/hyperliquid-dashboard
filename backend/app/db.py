@@ -528,6 +528,18 @@ def get_active_alerts_map() -> dict[tuple[str, str], dict]:
     return {(r["coin"], r["criterion"]): r for r in rows}
 
 
+def get_recently_resolved_map(since_ms: int) -> dict[tuple[str, str], dict]:
+    """Dernière alerte terminée (résolue ou acquittée) depuis `since_ms`, par couple."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT ON (coin, criterion) coin, criterion, severity, resolved_ts "
+            "FROM alerts WHERE active = 0 AND resolved_ts > %s "
+            "ORDER BY coin, criterion, resolved_ts DESC",
+            (since_ms,),
+        ).fetchall()
+    return {(r["coin"], r["criterion"]): r for r in rows}
+
+
 def insert_alerts_bulk(rows: list[tuple]) -> int:
     """Insère plusieurs alertes actives en un aller-retour.
 
@@ -609,7 +621,11 @@ def get_alert(alert_id: int) -> dict | None:
 def acknowledge_alert(alert_id: int) -> bool:
     with get_conn() as conn:
         cur = conn.execute(
-            "UPDATE alerts SET acknowledged = 1, active = 0 WHERE id = %s", (alert_id,)
+            # resolved_ts marque la fin : le refroidissement s'applique aussi à
+            # un acquittement (sinon l'alerte renaîtrait au cycle suivant si la
+            # condition persiste, notification comprise).
+            "UPDATE alerts SET acknowledged = 1, active = 0, resolved_ts = COALESCE(resolved_ts, %s) WHERE id = %s",
+            (int(time.time() * 1000), alert_id),
         )
         return cur.rowcount > 0
 
@@ -617,7 +633,10 @@ def acknowledge_alert(alert_id: int) -> bool:
 def acknowledge_all() -> int:
     """Acquitte toutes les alertes actives. Retourne le nb affecté."""
     with get_conn() as conn:
-        cur = conn.execute("UPDATE alerts SET acknowledged = 1, active = 0 WHERE active = 1")
+        cur = conn.execute(
+            "UPDATE alerts SET acknowledged = 1, active = 0, resolved_ts = COALESCE(resolved_ts, %s) WHERE active = 1",
+            (int(time.time() * 1000),),
+        )
         return cur.rowcount
 
 

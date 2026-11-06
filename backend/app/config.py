@@ -90,6 +90,16 @@ CONFLUENCE_MIN_CRITERIA = int(os.getenv("CONFLUENCE_MIN_CRITERIA", "3"))
 CONFLUENCE_SCORE_WARN = float(os.getenv("CONFLUENCE_SCORE_WARN", "4.0"))
 CONFLUENCE_SCORE_CRIT = float(os.getenv("CONFLUENCE_SCORE_CRIT", "7.0"))
 
+# --- Anti-bruit ----------------------------------------------------------------
+# Mesuré sur les alertes réelles : une alerte « volume » vivait 2 min en médiane,
+# et un quart se redéclenchait dans les 10 min suivant sa résolution (24 % pour
+# le prix) — oscillation autour du seuil, et autant de notifications.
+# Hystérésis : déclenchement au seuil, résolution seulement sous ce ratio du seuil.
+ALERT_RESOLVE_RATIO = float(os.getenv("ALERT_RESOLVE_RATIO", "0.7"))
+# Refroidissement : après résolution (ou acquittement), pas de nouvelle alerte
+# du même type sur le même coin pendant ce délai — sauf passage en critique.
+ALERT_COOLDOWN_SEC = int(os.getenv("ALERT_COOLDOWN_SEC", "1800"))
+
 # --- Notifications sortantes --------------------------------------------------
 # Les alertes s'affichent dans l'UI, mais personne ne regarde un dashboard à
 # 3h du matin : les nouvelles alertes sont aussi poussées vers Telegram et/ou

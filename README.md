@@ -60,6 +60,8 @@ Tous les seuils sont dans [`backend/app/config.py`](backend/app/config.py) et pe
 | `CRON_SECRET` | — | Protège `/api/cron/poll`. Vide = route ouverte |
 | `RUN_POLLER` | `0` | `1` = boucle de collecte in-process (dev local) |
 | `MAINTENANCE_INTERVAL_SEC` | `300` | Intervalle mini entre 2 passes downsample + purge |
+| `ALERT_RESOLVE_RATIO` | `0.7` | Hystérésis : une alerte ne se résout que sous ce ratio du seuil |
+| `ALERT_COOLDOWN_SEC` | `1800` | Pas de nouvelle alerte du même type sur le même coin après résolution ou acquittement, sauf passage en critique |
 | `POLL_INTERVAL_SEC` | `30` | Cadence de collecte des données |
 | `FUNDING_THRESHOLD_WARN` / `_CRIT` | `0.0005` / `0.001` | Seuils funding (0.05% / 0.1%) |
 | `OI_LOOKBACK_MIN` | `60` | Fenêtre de comparaison Open Interest |

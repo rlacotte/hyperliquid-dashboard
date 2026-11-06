@@ -40,9 +40,11 @@ class _CycleWriter:
     lieu et place d'un SELECT par couple évalué.
     """
 
-    def __init__(self, active: dict[tuple[str, str], dict], ts: int) -> None:
+    def __init__(self, active: dict[tuple[str, str], dict], ts: int, recently_resolved: dict | None = None) -> None:
         self._active = active
         self._ts = ts
+        self._recent = recently_resolved or {}
+        self.suppressed = 0
         self._inserts: list[tuple] = []
         self._resolves: list[tuple[str, str]] = []
         self._confluence_updates: list[tuple] = []
@@ -63,6 +65,12 @@ class _CycleWriter:
         """Crée une alerte si aucune active n'existe pour ce couple."""
         if self.has_active(coin, criterion) is not None:
             # Une alerte active existe déjà : pas de nouvelle alerte (anti-bruit).
+            return
+        prev = self._recent.get((coin, criterion.value))
+        if prev is not None and not (severity == Severity.CRITICAL and prev["severity"] != Severity.CRITICAL.value):
+            # Refroidissement : terminée il y a moins de ALERT_COOLDOWN_SEC. Seule
+            # une aggravation (passage en critique) justifie une nouvelle alerte.
+            self.suppressed += 1
             return
         self._inserts.append(
             (coin, self._ts, criterion.value, severity.value, message, details, score, direction)
@@ -109,6 +117,12 @@ def _severity_from_thresholds(threshold_warn: float, threshold_crit: float, valu
     return None
 
 
+def _resolved(value: float, threshold_warn: float) -> bool:
+    """Hystérésis : sous le seuil ne suffit pas, il faut repasser sous
+    ALERT_RESOLVE_RATIO × seuil. Entre les deux, l'alerte reste active."""
+    return abs(value) < threshold_warn * config.ALERT_RESOLVE_RATIO
+
+
 # --- Critère 1 : Funding rate ------------------------------------------------
 def evaluate_funding(asset: AssetMarket, w: _CycleWriter) -> None:
     funding = asset.funding
@@ -116,7 +130,8 @@ def evaluate_funding(asset: AssetMarket, w: _CycleWriter) -> None:
         config.FUNDING_THRESHOLD_WARN, config.FUNDING_THRESHOLD_CRIT, funding
     )
     if severity is None:
-        w.resolve(asset.coin, Criterion.FUNDING_RATE, "funding revenu sous le seuil")
+        if _resolved(funding, config.FUNDING_THRESHOLD_WARN):
+            w.resolve(asset.coin, Criterion.FUNDING_RATE, "funding revenu sous le seuil")
         return
     direction = "positif (longs paient)" if funding > 0 else "négatif (shorts paient)"
     pct = funding * 100
@@ -140,7 +155,8 @@ def evaluate_open_interest(asset: AssetMarket, ctx: HistoryContext, w: _CycleWri
         config.OI_PCT_THRESHOLD_WARN, config.OI_PCT_THRESHOLD_CRIT, delta_pct
     )
     if severity is None:
-        w.resolve(asset.coin, Criterion.OPEN_INTEREST, "OI stabilisé")
+        if _resolved(delta_pct, config.OI_PCT_THRESHOLD_WARN):
+            w.resolve(asset.coin, Criterion.OPEN_INTEREST, "OI stabilisé")
         return
     direction = "hausse" if delta_pct > 0 else "baisse"
     message = f"{asset.coin} OI en {direction} de {delta_pct * 100:+.1f}% sur {config.OI_LOOKBACK_MIN}min"
@@ -167,7 +183,8 @@ def evaluate_volume(asset: AssetMarket, ctx: HistoryContext, w: _CycleWriter) ->
 
     # Si le taux récent est faible (pas de pic), on résout toute alerte active.
     if recent_rate < config.VOLUME_MIN_RATE_USDPS:
-        w.resolve(asset.coin, Criterion.VOLUME, "volume revenu sous le plancher")
+        if _resolved(recent_rate, config.VOLUME_MIN_RATE_USDPS):
+            w.resolve(asset.coin, Criterion.VOLUME, "volume revenu sous le plancher")
         return
 
     # La baseline peut être négative (le volume cumulé 24h décroît naturellement
@@ -181,7 +198,8 @@ def evaluate_volume(asset: AssetMarket, ctx: HistoryContext, w: _CycleWriter) ->
         threshold_crit = config.VOLUME_MIN_RATE_USDPS * config.VOLUME_SPIKE_MULT_CRIT
         sev = _severity_from_thresholds(threshold_warn, threshold_crit, recent_rate)
         if sev is None:
-            w.resolve(asset.coin, Criterion.VOLUME, "volume revenu à la normale")
+            if _resolved(recent_rate, threshold_warn):
+                w.resolve(asset.coin, Criterion.VOLUME, "volume revenu à la normale")
             return
         message = (
             f"{asset.coin} pic de volume (${recent_rate / 1000:.0f}k/s sur "
@@ -204,7 +222,8 @@ def evaluate_volume(asset: AssetMarket, ctx: HistoryContext, w: _CycleWriter) ->
         mult,
     )
     if severity is None:
-        w.resolve(asset.coin, Criterion.VOLUME, "volume revenu à la normale")
+        if _resolved(mult, config.VOLUME_SPIKE_MULT_WARN):
+            w.resolve(asset.coin, Criterion.VOLUME, "volume revenu à la normale")
         return
     message = (
         f"{asset.coin} volume {mult:.1f}x la normale "
@@ -229,7 +248,8 @@ def evaluate_price_change(asset: AssetMarket, ctx: HistoryContext, w: _CycleWrit
         config.PRICE_PCT_THRESHOLD_WARN, config.PRICE_PCT_THRESHOLD_CRIT, delta_pct
     )
     if severity is None:
-        w.resolve(asset.coin, Criterion.PRICE_CHANGE, "prix stabilisé")
+        if _resolved(delta_pct, config.PRICE_PCT_THRESHOLD_WARN):
+            w.resolve(asset.coin, Criterion.PRICE_CHANGE, "prix stabilisé")
         return
     direction = "hausse" if delta_pct > 0 else "baisse"
     message = f"{asset.coin} {direction} de {delta_pct * 100:+.2f}% sur {config.PRICE_LOOKBACK_MIN}min"
@@ -333,7 +353,9 @@ def evaluate_all(
     """
     active = db.get_active_alerts_map()
     before_active = len(active)
-    writer = _CycleWriter(active, int(time.time() * 1000))
+    now_ms = int(time.time() * 1000)
+    recent = db.get_recently_resolved_map(now_ms - config.ALERT_COOLDOWN_SEC * 1000)
+    writer = _CycleWriter(active, now_ms, recent)
 
     # Étape 1 : critères individuels
     for asset in assets:
