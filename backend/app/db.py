@@ -167,6 +167,51 @@ def init_db() -> None:
             """
         )
 
+        # Ce qui s'est passé après chaque alerte (cf. track_record.py).
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS alert_outcomes (
+                alert_id BIGINT PRIMARY KEY,
+                coin TEXT NOT NULL,
+                ts BIGINT NOT NULL,
+                criterion TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                sign SMALLINT NOT NULL,
+                px0 DOUBLE PRECISION,
+                ret_1h DOUBLE PRECISION,
+                ret_4h DOUBLE PRECISION,
+                ret_24h DOUBLE PRECISION,
+                btc_1h DOUBLE PRECISION,
+                btc_4h DOUBLE PRECISION,
+                btc_24h DOUBLE PRECISION,
+                complete BOOLEAN NOT NULL DEFAULT false,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                computed_at BIGINT NOT NULL
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_outcomes_ts ON alert_outcomes(ts)")
+        # Résolution des bougies utilisées (15 ou 60 min) : à 60 min, l'horizon
+        # 1 h n'est pas mesurable et ne doit pas rester « en attente ».
+        conn.execute("ALTER TABLE alert_outcomes ADD COLUMN IF NOT EXISTS resolution_min INTEGER NOT NULL DEFAULT 15")
+
+        # Migration unique : avant la double résolution, les alertes de plus de
+        # ~52 jours étaient tentées en bougies de 15 min (indisponibles si loin)
+        # et épuisaient leurs tentatives sans mesure. On les réarme une fois ;
+        # la marque en kv empêche de masquer, aux démarrages suivants, de vrais
+        # échecs.
+        done = conn.execute("SELECT 1 FROM kv WHERE key = 'migration_outcomes_dual_resolution'").fetchone()
+        if not done:
+            conn.execute(
+                "UPDATE alert_outcomes SET attempts = 0 "
+                "WHERE px0 IS NULL AND ret_1h IS NULL AND ret_4h IS NULL AND resolution_min = 15"
+            )
+            conn.execute(
+                "INSERT INTO kv (key, ts, value) VALUES ('migration_outcomes_dual_resolution', %s, '{}'::jsonb) "
+                "ON CONFLICT (key) DO NOTHING",
+                (int(time.time() * 1000),),
+            )
+
     _apply_idle_session_timeout()
 
 
@@ -565,6 +610,106 @@ def acknowledge_all() -> int:
 def count_active_alerts() -> int:
     with get_conn() as conn:
         return conn.execute("SELECT COUNT(*) AS n FROM alerts WHERE active = 1").fetchone()["n"]
+
+
+# --- Track record des alertes -------------------------------------------------
+# Une alerte qui ne peut jamais être mesurée (coin délisté, bougies absentes)
+# resterait sinon « en attente » et serait retraitée indéfiniment.
+MAX_OUTCOME_ATTEMPTS = 6
+
+
+def pending_alert_outcomes(now_ms: int, horizon_ms: list[int], lookback_days: int) -> list[dict]:
+    """Alertes dont au moins un horizon est arrivé à maturité sans résultat.
+
+    `horizon_ms` : délais (croissants) après lesquels chaque horizon est mesurable.
+    Une alerte n'est donc reprise qu'à la maturation d'un nouvel horizon.
+    """
+    from .track_record import signal_sign  # import local : évite un cycle d'import
+
+    h1, h4, h24 = horizon_ms
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT a.id, a.coin, a.ts, a.criterion, a.severity, a.details, a.direction
+            FROM alerts a
+            LEFT JOIN alert_outcomes o ON o.alert_id = a.id
+            WHERE a.ts > %(since)s
+              AND COALESCE(o.attempts, 0) < %(max_attempts)s
+              AND (
+                    (o.ret_1h IS NULL AND COALESCE(o.resolution_min, 15) = 15 AND a.ts < %(t1)s)
+                 OR (o.ret_4h IS NULL AND a.ts < %(t4)s)
+                 OR (o.ret_24h IS NULL AND a.ts < %(t24)s)
+              )
+            ORDER BY a.ts
+            LIMIT 3000
+            """,
+            {
+                "since": now_ms - lookback_days * 86400_000,
+                "max_attempts": MAX_OUTCOME_ATTEMPTS,
+                "t1": now_ms - h1,
+                "t4": now_ms - h4,
+                "t24": now_ms - h24,
+            },
+        ).fetchall()
+    return [
+        {
+            "alert_id": r["id"],
+            "coin": r["coin"],
+            "ts": r["ts"],
+            "criterion": r["criterion"],
+            "severity": r["severity"],
+            "sign": signal_sign(r["criterion"], r["details"], r["direction"]),
+        }
+        for r in rows
+    ]
+
+
+def upsert_alert_outcomes(rows: list[dict], now_ms: int) -> None:
+    """Enregistre les résultats sans jamais effacer un horizon déjà mesuré."""
+    if not rows:
+        return
+    payload = [
+        (
+            r["alert_id"], r["coin"], r["ts"], r["criterion"], r["severity"], r["sign"], r.get("px0"),
+            r.get("ret_1h"), r.get("ret_4h"), r.get("ret_24h"),
+            r.get("btc_1h"), r.get("btc_4h"), r.get("btc_24h"),
+            bool(r.get("complete")), r.get("resolution_min", 15), now_ms,
+        )
+        for r in rows
+    ]
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(
+                """
+                INSERT INTO alert_outcomes
+                    (alert_id, coin, ts, criterion, severity, sign, px0,
+                     ret_1h, ret_4h, ret_24h, btc_1h, btc_4h, btc_24h, complete, resolution_min, attempts, computed_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, %s)
+                ON CONFLICT (alert_id) DO UPDATE SET
+                    px0 = COALESCE(alert_outcomes.px0, EXCLUDED.px0),
+                    ret_1h = COALESCE(alert_outcomes.ret_1h, EXCLUDED.ret_1h),
+                    ret_4h = COALESCE(alert_outcomes.ret_4h, EXCLUDED.ret_4h),
+                    ret_24h = COALESCE(alert_outcomes.ret_24h, EXCLUDED.ret_24h),
+                    btc_1h = COALESCE(alert_outcomes.btc_1h, EXCLUDED.btc_1h),
+                    btc_4h = COALESCE(alert_outcomes.btc_4h, EXCLUDED.btc_4h),
+                    btc_24h = COALESCE(alert_outcomes.btc_24h, EXCLUDED.btc_24h),
+                    complete = alert_outcomes.complete OR EXCLUDED.complete,
+                    resolution_min = EXCLUDED.resolution_min,
+                    attempts = alert_outcomes.attempts + 1,
+                    computed_at = EXCLUDED.computed_at
+                """,
+                payload,
+            )
+
+
+def alert_outcomes_rows(lookback_days: int) -> list[dict]:
+    since = int(time.time() * 1000) - lookback_days * 86400_000
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT coin, ts, criterion, severity, sign, ret_1h, ret_4h, ret_24h, btc_1h, btc_4h, btc_24h "
+            "FROM alert_outcomes WHERE ts > %s AND (ret_1h IS NOT NULL OR ret_4h IS NOT NULL)",
+            (since,),
+        ).fetchall()
 
 
 # --- Leaderboard : photos quotidiennes ----------------------------------------

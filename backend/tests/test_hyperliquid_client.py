@@ -10,9 +10,7 @@ from app import hyperliquid_client as hc
 
 
 def client_with(handler) -> hc.HyperliquidClient:
-    c = hc.HyperliquidClient()
-    c._client = httpx.AsyncClient(base_url="https://api.test", transport=httpx.MockTransport(handler))
-    return c
+    return hc.HyperliquidClient(httpx.AsyncClient(base_url="https://api.test", transport=httpx.MockTransport(handler)))
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +36,7 @@ def test_socket_morte_absorbee_par_une_relance():
     assert calls["n"] == 2
 
 
-def test_une_vraie_panne_remonte_apres_une_seule_relance():
+def test_une_vraie_panne_remonte_apres_toutes_les_tentatives():
     calls = {"n": 0}
 
     def handler(request):
@@ -47,7 +45,34 @@ def test_une_vraie_panne_remonte_apres_une_seule_relance():
 
     with pytest.raises(httpx.ConnectTimeout):
         asyncio.run(client_with(handler).get_all_mids())
-    assert calls["n"] == 2
+    assert calls["n"] == hc._ATTEMPTS
+
+
+def test_deux_echecs_puis_succes():
+    """Le cas constaté : connexions qui expirent puis passent."""
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        if calls["n"] < hc._ATTEMPTS:
+            raise httpx.ReadTimeout("lent")
+        return httpx.Response(200, json={"mids": {}})
+
+    assert asyncio.run(client_with(handler).get_all_mids()) == {}
+    assert calls["n"] == hc._ATTEMPTS
+
+
+def test_fresh_client_se_ferme_en_sortie():
+    async def run():
+        async with hc.fresh_client() as c:
+            inner = c._client
+        return inner.is_closed
+
+    assert asyncio.run(run()) is True
+
+
+def test_connexion_courte_lecture_longue():
+    assert hc._TIMEOUT.connect < hc._TIMEOUT.read
 
 
 def test_une_erreur_http_n_est_pas_relancee():

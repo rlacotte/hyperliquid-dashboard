@@ -30,28 +30,40 @@ _RETRYABLE = (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ConnectTimeou
 # enchaînées) sans jamais réveiller une connexion d'un cycle précédent.
 _KEEPALIVE_EXPIRY_SEC = 5.0
 
+# Connexion courte, lecture plus longue : une connexion qui ne s'établit pas en
+# 5 s ne s'établira pas en 15 ; autant retenter tout de suite. Constaté en
+# production : des ConnectTimeout à 15 s qui consommaient un quart du cycle.
+_TIMEOUT = httpx.Timeout(config.HTTP_TIMEOUT_SEC, connect=5.0)
+_ATTEMPTS = 3
+_BACKOFF_SEC = (0.5, 1.5)
+
 
 class HyperliquidClient:
-    def __init__(self) -> None:
-        self._client = httpx.AsyncClient(
-            base_url=config.HYPERLIQUID_API_URL,
-            timeout=config.HTTP_TIMEOUT_SEC,
-            headers={"Content-Type": "application/json"},
-            limits=httpx.Limits(keepalive_expiry=_KEEPALIVE_EXPIRY_SEC),
-        )
+    def __init__(self, client: httpx.AsyncClient | None = None) -> None:
+        self._client = client or _new_http_client()
 
     async def aclose(self) -> None:
         await self._client.aclose()
 
+    async def __aenter__(self) -> "HyperliquidClient":
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        await self.aclose()
+
     async def _post_info(self, body: dict[str, Any]) -> Any:
-        try:
-            resp = await self._client.post("/info", json=body)
-        except _RETRYABLE as exc:
-            # Une seule relance, sur une connexion neuve : une panne réelle doit
-            # toujours remonter, mais une socket morte ne doit pas coûter un cycle.
-            logger.warning("Hyperliquid %s (%s) : relance", body.get("type"), type(exc).__name__)
-            await asyncio.sleep(0.5)
-            resp = await self._client.post("/info", json=body)
+        for attempt in range(_ATTEMPTS):
+            try:
+                resp = await self._client.post("/info", json=body)
+                break
+            except _RETRYABLE as exc:
+                # La requête n'a pas abouti côté serveur (lecture seule) : la
+                # rejouer est sans risque. Après la dernière tentative, l'erreur
+                # remonte — une vraie panne doit rester visible.
+                if attempt == _ATTEMPTS - 1:
+                    raise
+                logger.warning("Hyperliquid %s (%s) : tentative %d/%d", body.get("type"), type(exc).__name__, attempt + 2, _ATTEMPTS)
+                await asyncio.sleep(_BACKOFF_SEC[min(attempt, len(_BACKOFF_SEC) - 1)])
         resp.raise_for_status()
         return resp.json()
 
@@ -101,7 +113,30 @@ class HyperliquidClient:
         return await self._post_info({"type": "l2Book", "coin": coin})
 
 
-# Singleton partagé
+def _new_http_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        base_url=config.HYPERLIQUID_API_URL,
+        timeout=_TIMEOUT,
+        headers={"Content-Type": "application/json"},
+        limits=httpx.Limits(keepalive_expiry=_KEEPALIVE_EXPIRY_SEC),
+    )
+
+
+def fresh_client() -> HyperliquidClient:
+    """Client neuf, à utiliser en `async with` le temps d'un cycle de collecte.
+
+    En serverless, un AsyncClient de module survit d'une invocation à l'autre :
+    son pool de connexions et ses verrous peuvent rester liés à une boucle
+    asyncio ou à des sockets d'une invocation précédente. Constaté en
+    production : ReadTimeout et ConnectTimeout aléatoires malgré les relances.
+    Un client par cycle (une poignée de main TLS par minute) supprime la
+    question au lieu de dépendre de l'interne de l'hébergeur.
+    """
+    return HyperliquidClient()
+
+
+# Singleton pour les routes HTTP occasionnelles (bougies, funding) ; la collecte
+# utilise fresh_client().
 _client: HyperliquidClient | None = None
 
 

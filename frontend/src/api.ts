@@ -27,6 +27,7 @@ export const api = {
   health: () =>
     getJson<{ status: string; last_fetch_ms: number; assets_count: number; poll_interval_sec: number }>("/api/health"),
   globalMetrics: () => getJson<GlobalMetrics>("/api/global-metrics"),
+  trackRecord: () => getJson<import("./signals").TrackRecord>("/api/track-record"),
   leaderboard: () =>
     getJson<{
       ts: number;

@@ -1,12 +1,41 @@
 import { useState } from "react";
 import type { Alert, Criterion, Severity } from "../types";
 import { directionArrow, directionLabel, fmtScore, fmtTime } from "../format";
+import { alertSign, findGroup, MIN_SAMPLE, verdict, type TrackRecord } from "../signals";
+import { href } from "../router";
 
 interface Props {
   alerts: Alert[];
   onAck: (id: number) => void;
   onAckAll: () => void;
   onSelectCoin: (coin: string) => void;
+  /** Track record par type d'alerte : affiché sous chaque alerte. */
+  track?: TrackRecord | null;
+}
+
+/** Horizon de référence pour le bilan affiché sous chaque alerte. */
+const HINT_HORIZON = "4h" as const;
+
+/**
+ * Le bilan historique du TYPE de l'alerte, sous l'alerte elle-même. C'est ce que
+ * personne ne fait : on reçoit un signal sans savoir ce qu'ont donné les
+ * précédents du même genre.
+ */
+function TrackHint({ alert, track }: { alert: Alert; track: TrackRecord | null | undefined }) {
+  if (!track) return null;
+  const g = findGroup(track, alert.criterion, alertSign(alert));
+  const s = g?.horizons[HINT_HORIZON];
+  const v = verdict(s);
+  const tone = v.tone === "positive" ? "text-green-400/90" : v.tone === "negative" ? "text-red-400/90" : "text-gray-500";
+  return (
+    <a href={href("signals")} className={`mt-1.5 block text-[11px] leading-snug hover:underline ${tone}`} title="Voir le track record complet">
+      {!s || !s.n_vs_btc
+        ? "Historique : pas encore mesuré"
+        : s.n_vs_btc < MIN_SAMPLE
+          ? `Historique +4 h : ${s.n_vs_btc} cas, trop peu pour conclure`
+          : `Historique +4 h — ${v.text} · ${Math.round((s.p_beat_btc ?? 0) * 100)} % des ${s.n_vs_btc} cas au-dessus du BTC`}
+    </a>
+  );
 }
 
 const SEVERITY_STYLES: Record<Severity, { bg: string; border: string; text: string; label: string }> = {
@@ -44,7 +73,7 @@ function confluenceStyle(alert: Alert) {
   return null;
 }
 
-export function AlertsPanel({ alerts, onAck, onAckAll, onSelectCoin }: Props) {
+export function AlertsPanel({ alerts, onAck, onAckAll, onSelectCoin, track }: Props) {
   const [filter, setFilter] = useState<Criterion | "all">("all");
 
   const filtered = filter === "all" ? alerts : alerts.filter((a) => a.criterion === filter);
@@ -160,6 +189,7 @@ export function AlertsPanel({ alerts, onAck, onAckAll, onSelectCoin }: Props) {
                     <span className="text-xs text-gray-500">{fmtTime(alert.ts)}</span>
                   </div>
                   <p className="text-sm text-gray-300">{alert.message}</p>
+                  <TrackHint alert={alert} track={track} />
                 </div>
                 <button
                   onClick={() => onAck(alert.id)}

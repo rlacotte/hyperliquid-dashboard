@@ -11,7 +11,7 @@ import logging
 import time
 
 from . import alert_engine, cache, config, db, notifier
-from .hyperliquid_client import get_client
+from .hyperliquid_client import HyperliquidClient, fresh_client
 from .models import AssetMarket
 
 logger = logging.getLogger(__name__)
@@ -81,9 +81,16 @@ def _maybe_run_maintenance(now_ms: int) -> dict | None:
 
 
 async def poll_once() -> dict:
-    """Un cycle complet. Retourne un résumé (utilisé comme réponse du cron)."""
+    """Un cycle complet. Retourne un résumé (utilisé comme réponse du cron).
+
+    Client HTTP neuf par cycle, fermé à la fin : cf. hyperliquid_client.fresh_client.
+    """
+    async with fresh_client() as client:
+        return await _poll_with(client)
+
+
+async def _poll_with(client: HyperliquidClient) -> dict:
     started = time.time()
-    client = get_client()
     try:
         universe, asset_ctxs = await client.get_meta_and_asset_ctxs()
         mids = await client.get_all_mids()
@@ -137,6 +144,15 @@ async def poll_once() -> dict:
     except Exception:
         logger.exception("Erreur leaderboard")
 
+    # Track record : mesure ce qui a suivi les alertes passées, par petits lots
+    # (au plus 3 coins toutes les 2 min). Même règle : jamais avant les alertes.
+    track_info = None
+    try:
+        from . import track_record
+        track_info = await track_record.maybe_process(client, now_ms)
+    except Exception:
+        logger.exception("Erreur track record")
+
     maintenance = _maybe_run_maintenance(now_ms)
 
     return {
@@ -147,6 +163,7 @@ async def poll_once() -> dict:
         "alerts_created": len(created),
         "notified": notified,
         "leaderboard": leaderboard_info,
+        "track_record": track_info,
         "maintenance": maintenance,
         "duration_ms": int((time.time() - started) * 1000),
     }

@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import cache, config, db, poller
 from .hyperliquid_client import get_client
-from .routes import alerts, cron, global_metrics, leaderboard, markets, replay
+from .routes import alerts, cron, global_metrics, leaderboard, markets, replay, signals
 
 logging.basicConfig(
     level=logging.INFO,
@@ -73,6 +73,7 @@ app.include_router(cron.router)
 app.include_router(global_metrics.router)
 app.include_router(replay.router)
 app.include_router(leaderboard.router)
+app.include_router(signals.router)
 
 
 # --- Cache CDN sur les routes de lecture --------------------------------------
@@ -94,6 +95,7 @@ _CACHE_RULES: tuple[tuple[re.Pattern, int], ...] = (
     (re.compile(r"^/api/global-metrics/history$"), 60),
     # Rafraîchi au plus toutes les 2 h côté serveur.
     (re.compile(r"^/api/leaderboard$"), 300),
+    (re.compile(r"^/api/track-record$"), 300),
     (re.compile(r"^/api/markets/[^/]+/(candles|funding)$"), 60),
 )
 
