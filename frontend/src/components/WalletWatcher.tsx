@@ -82,7 +82,12 @@ export function WalletWatcher() {
 
   if (toasts.length === 0) return null;
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2" aria-live="polite">
+    // Téléphone : un seul toast à la fois, sinon la pile recouvre la moitié de
+    // l'écran ; les suivants restent dans le fil d'activité de la page Wallet.
+    <div
+      className="pointer-events-none fixed inset-x-3 bottom-3 z-[60] flex flex-col gap-2 sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-80 [&>*:nth-child(n+2)]:hidden sm:[&>*:nth-child(n+2)]:block"
+      aria-live="polite"
+    >
       {toasts.map((a) => {
         const { title, body } = describe(a, labelsRef.current.get(a.user) ?? shortAddr(a.user), fmtUsd);
         const tone =

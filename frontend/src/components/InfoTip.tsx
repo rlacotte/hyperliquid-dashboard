@@ -25,7 +25,11 @@ export function InfoTip({ text, align = "center" }: Props) {
       </span>
       <span
         role="tooltip"
-        className={`pointer-events-none invisible absolute top-full z-50 mt-1.5 w-64 rounded-md border border-bg-border bg-bg-base p-2.5 text-left text-xs font-normal normal-case leading-snug tracking-normal text-gray-300 opacity-0 shadow-xl transition-opacity group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100 ${pos}`}
+        // display:none et non visibility:hidden : une bulle invisible occupe
+        // quand même sa place et élargit la zone de défilement des tableaux,
+        // ce qui ouvrait un vide à droite sur téléphone. Au doigt, toucher ⓘ
+        // lui donne le focus et affiche la bulle.
+        className={`pointer-events-none absolute top-full z-50 mt-1.5 hidden w-64 max-w-[calc(100vw-2rem)] whitespace-normal rounded-md border border-bg-border bg-bg-base p-2.5 text-left text-xs font-normal normal-case leading-snug tracking-normal text-gray-300 shadow-xl group-focus-within:block group-hover:block ${pos}`}
       >
         {text}
       </span>

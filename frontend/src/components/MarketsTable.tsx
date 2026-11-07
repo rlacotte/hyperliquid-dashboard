@@ -40,6 +40,8 @@ interface Col {
   align: "left" | "right";
   help?: string;
   kinds: MarketKind[];
+  /** Masquée sous 640 px : sur téléphone, on garde marché, prix, 24h, régime. */
+  secondary?: boolean;
   sortValue: (m: Market, c: Ctx) => number | string;
   render: (m: Market, c: Ctx) => ReactNode;
 }
@@ -62,7 +64,7 @@ const COLS: Col[] = [
             {m.dex}
           </span>
         )}
-        {m.maxLeverage && <span className="text-[10px] text-gray-600">{m.maxLeverage}×</span>}
+        {m.maxLeverage && <span className="hidden text-[10px] text-gray-600 sm:inline">{m.maxLeverage}×</span>}
         {c.atCap(m) && (
           <span
             className="rounded bg-amber-500/15 px-1 py-px text-[10px] font-semibold text-amber-300"
@@ -116,6 +118,7 @@ const COLS: Col[] = [
     align: "right",
     help: "Taux payé chaque heure par les longs aux shorts (si positif) ou l'inverse. En dessous : le même taux annualisé (APR), comparable avec Binance ou Bybit qui paient toutes les 4 ou 8 h.",
     kinds: PERPS,
+    secondary: true,
     sortValue: (m) => m.funding ?? 0,
     render: (m) =>
       m.funding === null ? (
@@ -133,6 +136,7 @@ const COLS: Col[] = [
     align: "right",
     help: "Valeur notionnelle de toutes les positions ouvertes, en USD.",
     kinds: PERPS,
+    secondary: true,
     sortValue: (m) => m.openInterestUsd ?? 0,
     render: (m) => <span className="tabular-nums text-gray-300">{m.openInterestUsd === null ? "—" : fmtUsd(m.openInterestUsd)}</span>,
   },
@@ -142,6 +146,7 @@ const COLS: Col[] = [
     align: "right",
     help: "Volume échangé sur les dernières 24 h, en USD.",
     kinds: ALL,
+    secondary: true,
     sortValue: (m) => m.volume24h,
     render: (m) => <span className="tabular-nums text-gray-300">{fmtUsd(m.volume24h)}</span>,
   },
@@ -269,12 +274,28 @@ export function MarketsTable({ markets, mids, confluence, oiCaps, selectedId, on
           />
           Inactifs
         </label>
+        {/* Mobile : les colonnes de tri masquées restent accessibles ici. */}
+        <select
+          value={sortCol.id}
+          onChange={(e) => {
+            setSortId(e.target.value);
+            setSortDir(e.target.value === "name" ? "asc" : "desc");
+          }}
+          aria-label="Trier par"
+          className="rounded-md border border-bg-border bg-bg-panel px-2 py-1.5 text-sm text-gray-300 sm:hidden"
+        >
+          {cols.map((c) => (
+            <option key={c.id} value={c.id}>
+              Tri : {c.label}
+            </option>
+          ))}
+        </select>
         <input
           type="text"
           placeholder="Filtrer…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="w-36 rounded-md border border-bg-border bg-bg-panel px-3 py-1.5 text-sm text-gray-200 outline-none focus:border-blue-500"
+          className="w-28 rounded-md border border-bg-border bg-bg-panel px-3 py-1.5 text-sm sm:w-36 text-gray-200 outline-none focus:border-blue-500"
         />
       </div>
 
@@ -285,9 +306,9 @@ export function MarketsTable({ markets, mids, confluence, oiCaps, selectedId, on
               {cols.map((col, i) => (
                 <th
                   key={col.id}
-                  className={`select-none whitespace-nowrap px-3 py-2.5 font-medium text-gray-400 ${
+                  className={`select-none whitespace-nowrap px-2 py-2.5 font-medium text-gray-400 sm:px-3 ${
                     col.align === "right" ? "text-right" : "text-left"
-                  }`}
+                  } ${col.secondary ? "hidden sm:table-cell" : ""}`}
                 >
                   <button onClick={() => toggleSort(col.id)} className="hover:text-white">
                     {col.label}
@@ -308,7 +329,12 @@ export function MarketsTable({ markets, mids, confluence, oiCaps, selectedId, on
                 }`}
               >
                 {cols.map((col) => (
-                  <td key={col.id} className={`whitespace-nowrap px-3 py-1.5 ${col.align === "right" ? "text-right" : "text-left"}`}>
+                  <td
+                    key={col.id}
+                    className={`whitespace-nowrap px-2 py-1.5 sm:px-3 ${col.align === "right" ? "text-right" : "text-left"} ${
+                      col.secondary ? "hidden sm:table-cell" : ""
+                    }`}
+                  >
                     {col.render(m, ctx)}
                   </td>
                 ))}

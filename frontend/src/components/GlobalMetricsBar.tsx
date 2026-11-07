@@ -14,15 +14,18 @@ interface MetricCardProps {
 
 function MetricCard({ icon, label, children, sparklineValues, sparklineColor }: MetricCardProps) {
   return (
-    <div className="flex min-w-[140px] flex-1 flex-col gap-1 rounded-lg border border-bg-border bg-bg-panel p-3">
+    <div className="flex min-w-[124px] flex-1 flex-col gap-1 rounded-lg border border-bg-border bg-bg-panel p-2 sm:min-w-[140px] sm:p-3">
       <div className="flex items-center gap-1.5 text-xs text-gray-500">
         <span>{icon}</span>
         <span className="truncate">{label}</span>
       </div>
       <div className="flex items-end justify-between gap-2">
         <div className="min-w-0 flex-1">{children}</div>
+        {/* Téléphone : la carte est trop étroite pour la courbe et le libellé. */}
         {sparklineValues && sparklineValues.length >= 2 && (
-          <Sparkline values={sparklineValues} color={sparklineColor} width={60} height={20} />
+          <span className="hidden sm:block">
+            <Sparkline values={sparklineValues} color={sparklineColor} width={60} height={20} />
+          </span>
         )}
       </div>
     </div>
@@ -56,7 +59,7 @@ export function GlobalMetricsBar() {
 
   if (!data) {
     return (
-      <div className="flex gap-2 overflow-x-auto border-b border-bg-border bg-bg-panel px-4 py-2">
+      <div className="no-scrollbar flex shrink-0 gap-2 overflow-x-auto border-b border-bg-border bg-bg-panel px-3 py-2 md:px-4">
         {Array.from({ length: 7 }).map((_, i) => (
           <div key={i} className="h-16 min-w-[140px] flex-1 animate-pulse rounded-lg bg-bg-hover" />
         ))}
@@ -70,7 +73,7 @@ export function GlobalMetricsBar() {
   const advancePct = total > 0 ? (data.hl_advance_count / total) * 100 : 50;
 
   return (
-    <div className="flex gap-2 overflow-x-auto border-b border-bg-border bg-bg-panel px-4 py-2">
+    <div className="no-scrollbar flex shrink-0 gap-2 overflow-x-auto border-b border-bg-border bg-bg-panel px-3 py-2 md:px-4">
       {/* Fear & Greed */}
       <MetricCard
         icon="😱"

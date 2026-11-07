@@ -21,6 +21,7 @@ export function TapePage() {
   const [minUsd, setMinUsd] = useState(100_000);
   const [paused, setPaused] = useState(false);
   const [q, setQ] = useState("");
+  const [view, setView] = useState<"orders" | "flows">("orders");
   const [orders, setOrders] = useState<Order[]>([]);
   const [flows, setFlows] = useState<{ coin: string; net: number; gross: number }[]>([]);
 
@@ -85,8 +86,21 @@ export function TapePage() {
   const outflows = ranked.filter((f) => f.net < 0).reverse().slice(0, 8);
 
   return (
-    <main className="flex flex-1 gap-4 overflow-hidden p-4">
-      <div className="flex min-w-0 flex-1 flex-col">
+    <main className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 md:p-4 xl:flex-row xl:gap-4">
+      {/* Sous 1280 px, la pression acheteuse/vendeuse ne tient plus à droite. */}
+      <div className="flex shrink-0 rounded-lg border border-bg-border bg-bg-panel p-0.5 xl:hidden">
+        {(["orders", "flows"] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={`flex-1 rounded-md px-3 py-1.5 text-sm ${view === v ? "bg-bg-hover text-white" : "text-gray-400"}`}
+          >
+            {v === "orders" ? "Gros ordres" : "Pression 5 min"}
+          </button>
+        ))}
+      </div>
+
+      <div className={`min-h-0 min-w-0 flex-1 flex-col ${view === "flows" ? "hidden xl:flex" : "flex"}`}>
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <h1 className="text-lg font-semibold text-white">Flux live</h1>
           <span className="text-xs text-gray-500">
@@ -121,20 +135,20 @@ export function TapePage() {
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-bg-panel text-xs text-gray-400">
               <tr>
-                <th className="px-3 py-2 text-left font-medium">Heure</th>
+                <th className="hidden sm:table-cell px-3 py-2 text-left font-medium">Heure</th>
                 <th className="px-3 py-2 text-left font-medium">Marché</th>
                 <th className="px-3 py-2 text-left font-medium">
                   Sens
                   <InfoTip text="Côté de l'initiateur (taker) : ACHAT s'il a acheté en agressant les offres, VENTE s'il a vendu sur les demandes." />
                 </th>
                 <th className="px-3 py-2 text-right font-medium">Notionnel</th>
-                <th className="px-3 py-2 text-right font-medium">
+                <th className="hidden sm:table-cell px-3 py-2 text-right font-medium">
                   Prix moyen
                   <InfoTip text="Prix moyen pondéré des fills de l'ordre." />
                 </th>
                 <th className="px-3 py-2 text-left font-medium">Initiateur</th>
-                <th className="px-3 py-2 text-left font-medium">Contreparties</th>
-                <th className="px-3 py-2 text-right font-medium">
+                <th className="hidden sm:table-cell px-3 py-2 text-left font-medium">Contreparties</th>
+                <th className="hidden sm:table-cell px-3 py-2 text-right font-medium">
                   Contexte
                   <InfoTip text="Funding annualisé et variation 24 h du marché au moment de l'ordre." align="right" />
                 </th>
@@ -156,7 +170,7 @@ export function TapePage() {
         </div>
       </div>
 
-      <aside className="hidden w-72 shrink-0 flex-col gap-3 overflow-auto xl:flex">
+      <aside className={`min-h-0 flex-col gap-3 overflow-auto xl:flex xl:w-72 xl:flex-none xl:shrink-0 ${view === "flows" ? "flex flex-1" : "hidden"}`}>
         <FlowPanel title="Pression acheteuse" items={inflows} byId={byId} />
         <FlowPanel title="Pression vendeuse" items={outflows} byId={byId} />
       </aside>
@@ -170,7 +184,7 @@ function OrderRow({ order: o, market }: { order: Order; market: Market | undefin
   const single = o.makers.size === 1 ? [...o.makers][0] : null;
   return (
     <tr className={`border-t border-bg-border ${buy ? "flash-up" : "flash-down"}`}>
-      <td className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-gray-500">
+      <td className="hidden sm:table-cell whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-gray-500">
         {new Date(o.time).toLocaleTimeString("fr-FR", { hour12: false })}
       </td>
       <td className="whitespace-nowrap px-3 py-1.5">
@@ -181,7 +195,7 @@ function OrderRow({ order: o, market }: { order: Order; market: Market | undefin
       <td className={`whitespace-nowrap px-3 py-1.5 text-right font-semibold tabular-nums ${o.notional >= 1e6 ? "text-amber-300" : "text-gray-100"}`}>
         {fmtUsd(o.notional)}
       </td>
-      <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-gray-400">
+      <td className="hidden sm:table-cell whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-gray-400">
         {fmtPrice(o.vwap)}
         {o.fills > 1 && <span className="ml-1 text-[10px] text-gray-600">{o.fills} fills</span>}
       </td>
@@ -190,7 +204,7 @@ function OrderRow({ order: o, market }: { order: Order; market: Market | undefin
           {shortAddr(o.taker)}
         </a>
       </td>
-      <td className="px-3 py-1.5 text-xs text-gray-500">
+      <td className="hidden sm:table-cell px-3 py-1.5 text-xs text-gray-500">
         {single ? (
           <a href={href("wallet", single)} className="font-mono hover:text-gray-300 hover:underline">
             {shortAddr(single)}
@@ -199,7 +213,7 @@ function OrderRow({ order: o, market }: { order: Order; market: Market | undefin
           `${o.makers.size} contreparties`
         )}
       </td>
-      <td className="whitespace-nowrap px-3 py-1.5 text-right text-[11px] tabular-nums text-gray-500">
+      <td className="hidden sm:table-cell whitespace-nowrap px-3 py-1.5 text-right text-[11px] tabular-nums text-gray-500">
         {market?.funding !== null && market?.funding !== undefined && (
           <span className={colorPct(market.funding)}>{fmtApr(fundingApr(market.funding))}</span>
         )}

@@ -34,15 +34,27 @@ export default function App() {
   const health = usePolling(() => api.health(), 30_000);
   const signalsTs = health.data?.last_fetch_ms || undefined;
 
+  // h-dvh et non h-screen : sur mobile, 100vh inclut la barre d'adresse du
+  // navigateur et masque le bas de l'écran.
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex items-center gap-4 border-b border-bg-border bg-bg-panel px-6 py-2.5">
-        <a href="#/markets" className="shrink-0 text-lg font-bold text-white">
-          <span className="text-blue-500">⚡</span> Hyperliquid Dashboard
-        </a>
-        <Nav items={NAV} current={route.page} />
-        <div className="ml-auto">
-          <StatusBadge ws={ws} signalsTs={signalsTs} signalsError={health.error} />
+    <div className="flex h-dvh flex-col">
+      <header className="border-b border-bg-border bg-bg-panel">
+        <div className="flex items-center gap-3 px-3 py-2 md:gap-4 md:px-6 md:py-2.5">
+          <a href="#/markets" className="shrink-0 text-base font-bold text-white md:text-lg">
+            <span className="text-blue-500">⚡</span> <span className="hidden sm:inline">Hyperliquid Dashboard</span>
+            <span className="sm:hidden">Hyperliquid</span>
+          </a>
+          <div className="hidden min-w-0 md:block">
+            <Nav items={NAV} current={route.page} />
+          </div>
+          <div className="ml-auto shrink-0">
+            <StatusBadge ws={ws} signalsTs={signalsTs} signalsError={health.error} />
+          </div>
+        </div>
+        {/* Mobile : navigation sur sa propre ligne, défilable — sept sections
+            ne tiennent pas à côté du logo sur 375 px. */}
+        <div className="no-scrollbar overflow-x-auto px-2 pb-1.5 md:hidden">
+          <Nav items={NAV} current={route.page} />
         </div>
       </header>
 

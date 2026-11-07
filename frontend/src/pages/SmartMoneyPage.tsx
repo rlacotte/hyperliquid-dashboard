@@ -42,7 +42,7 @@ export function SmartMoneyPage() {
   );
 
   return (
-    <main className="flex flex-1 flex-col overflow-hidden p-4">
+    <main className="flex min-h-0 flex-1 flex-col overflow-auto p-3 md:overflow-hidden md:p-4">
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <h1 className="text-lg font-semibold text-white">Smart money</h1>
         <div className="flex rounded-lg border border-bg-border bg-bg-panel p-0.5">
@@ -127,7 +127,7 @@ function RankingTab({ rows, snapshots }: { rows: LeaderRow[]; snapshots: { days:
     });
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-col md:min-h-0 md:flex-1">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
         {(Object.keys(PROFILES) as Profile[]).map((p) => (
           <button
@@ -144,6 +144,17 @@ function RankingTab({ rows, snapshots }: { rows: LeaderRow[]; snapshots: { days:
         <button onClick={() => setShowMethod((s) => !s)} className="ml-1 text-gray-500 underline-offset-2 hover:text-gray-300 hover:underline">
           {showMethod ? "Masquer la méthode" : "Comment sont classés les traders ?"}
         </button>
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as SortKey)}
+          aria-label="Trier par"
+          className="rounded border border-bg-border bg-bg-panel px-1.5 py-1 text-gray-300 sm:hidden"
+        >
+          <option value="pnl">Tri : PnL</option>
+          <option value="roi">Tri : ROI</option>
+          <option value="av">Tri : valeur</option>
+          <option value="edge">Tri : edge</option>
+        </select>
         <div className="ml-auto flex items-center gap-1">
           {(Object.keys(WIN_FIELDS) as Win[]).map((w) => (
             <button key={w} onClick={() => setWin(w)} className={`rounded px-2 py-0.5 ${win === w ? "bg-blue-600 text-white" : "text-gray-500 hover:text-white"}`}>
@@ -179,14 +190,14 @@ function RankingTab({ rows, snapshots }: { rows: LeaderRow[]; snapshots: { days:
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-bg-border">
+      <div className="overflow-auto rounded-lg border border-bg-border md:min-h-0 md:flex-1">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-bg-panel text-xs text-gray-400">
             <tr>
-              <th className="px-3 py-2 text-right font-medium">#</th>
+              <th className="hidden sm:table-cell px-3 py-2 text-right font-medium">#</th>
               <th className="px-3 py-2 text-left font-medium">Trader</th>
-              <th className="px-3 py-2 text-left font-medium">Profil</th>
-              <SortTh active={sort === "av"} onClick={() => setSort("av")} help="Valeur du compte selon le leaderboard Hyperliquid.">
+              <th className="hidden sm:table-cell px-3 py-2 text-left font-medium">Profil</th>
+              <SortTh secondary active={sort === "av"} onClick={() => setSort("av")} help="Valeur du compte selon le leaderboard Hyperliquid.">
                 Valeur
               </SortTh>
               <SortTh active={sort === "pnl"} onClick={() => setSort("pnl")}>
@@ -195,11 +206,11 @@ function RankingTab({ rows, snapshots }: { rows: LeaderRow[]; snapshots: { days:
               <SortTh active={sort === "roi"} onClick={() => setSort("roi")}>
                 ROI {f.label}
               </SortTh>
-              <th className="px-3 py-2 text-right font-medium">Volume 30 j</th>
-              <SortTh active={sort === "edge"} onClick={() => setSort("edge")} help="PnL 30 j par dollar échangé, en points de base.">
+              <th className="hidden sm:table-cell px-3 py-2 text-right font-medium">Volume 30 j</th>
+              <SortTh secondary active={sort === "edge"} onClick={() => setSort("edge")} help="PnL 30 j par dollar échangé, en points de base.">
                 Edge
               </SortTh>
-              <th className="px-3 py-2 text-center font-medium">
+              <th className="hidden px-3 py-2 text-center font-medium sm:table-cell">
                 Régularité
                 <InfoTip text="Signe du PnL sur 7 j, 30 j et tout l'historique. Trois verts : gagnant sur toutes les fenêtres." align="right" />
               </th>
@@ -212,25 +223,25 @@ function RankingTab({ rows, snapshots }: { rows: LeaderRow[]; snapshots: { days:
               const edge = edgeBp(r);
               return (
                 <tr key={r.a} className="border-t border-bg-border hover:bg-bg-hover">
-                  <td className="px-3 py-1.5 text-right text-xs tabular-nums text-gray-600">{i + 1}</td>
+                  <td className="hidden sm:table-cell px-3 py-1.5 text-right text-xs tabular-nums text-gray-600">{i + 1}</td>
                   <td className="px-3 py-1.5">
                     <a href={href("wallet", r.a)} className="text-blue-300 hover:text-blue-200 hover:underline">
                       {r.n ? <span className="font-medium">{r.n}</span> : <span className="font-mono text-xs">{shortAddr(r.a)}</span>}
                     </a>
                   </td>
-                  <td className="px-3 py-1.5">
+                  <td className="hidden sm:table-cell px-3 py-1.5">
                     <span className={`rounded px-1.5 py-px text-[11px] ${PROFILES[r.pr].tone}`} title={PROFILES[r.pr].help}>
                       {PROFILES[r.pr].label}
                     </span>
                   </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-gray-300">{fmtUsd(r.av)}</td>
+                  <td className="hidden sm:table-cell px-3 py-1.5 text-right tabular-nums text-gray-300">{fmtUsd(r.av)}</td>
                   <td className={`px-3 py-1.5 text-right font-semibold tabular-nums ${colorPct(pnl)}`}>{fmtUsdSigned(pnl)}</td>
                   <td className={`px-3 py-1.5 text-right tabular-nums ${colorPct(roi)}`}>{fmtPct(roi)}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtUsd(r.vm)}</td>
-                  <td className={`px-3 py-1.5 text-right tabular-nums ${edge === null ? "text-gray-700" : colorPct(edge)}`}>
+                  <td className="hidden sm:table-cell px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtUsd(r.vm)}</td>
+                  <td className={`hidden sm:table-cell px-3 py-1.5 text-right tabular-nums ${edge === null ? "text-gray-700" : colorPct(edge)}`}>
                     {edge === null ? "—" : `${edge.toFixed(edge >= 100 || edge <= -100 ? 0 : 1)} bp`}
                   </td>
-                  <td className="px-3 py-1.5">
+                  <td className="hidden px-3 py-1.5 sm:table-cell">
                     <div className="flex justify-center gap-1">
                       {[r.pw, r.pm, r.pa].map((v, k) => (
                         <span key={k} className={`h-2 w-2 rounded-full ${v > 0 ? "bg-green-500" : v < 0 ? "bg-red-500" : "bg-gray-700"}`} />
@@ -329,17 +340,17 @@ function PositioningTab({ positions, mids, caption }: { positions: TrackedPositi
   const maxGross = Math.max(1, ...bias.map((b) => b.longUsd + b.shortUsd));
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-col md:min-h-0 md:flex-1">
       {caption}
-      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-bg-border">
+      <div className="overflow-auto rounded-lg border border-bg-border md:min-h-0 md:flex-1">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-bg-panel text-xs text-gray-400">
             <tr>
               <th className="px-3 py-2 text-left font-medium">Coin</th>
-              <th className="px-3 py-2 text-right font-medium">Prix</th>
-              <th className="px-3 py-2 text-right font-medium">Longs</th>
-              <th className="px-3 py-2 text-right font-medium">Shorts</th>
-              <th className="w-1/3 px-3 py-2 text-left font-medium">
+              <th className="hidden sm:table-cell px-3 py-2 text-right font-medium">Prix</th>
+              <th className="hidden sm:table-cell px-3 py-2 text-right font-medium">Longs</th>
+              <th className="hidden sm:table-cell px-3 py-2 text-right font-medium">Shorts</th>
+              <th className="px-3 py-2 text-left font-medium sm:w-1/3">
                 Répartition
                 <InfoTip text="Notionnel long (vert) contre short (rouge) de la cohorte, la largeur totale étant proportionnelle à son exposition sur ce coin." />
               </th>
@@ -355,11 +366,11 @@ function PositioningTab({ positions, mids, caption }: { positions: TrackedPositi
               return (
                 <tr key={b.coin} className="border-t border-bg-border">
                   <td className="px-3 py-1.5 font-medium text-white">{b.coin}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-gray-400">{mids[b.coin] ? fmtPrice(mids[b.coin]) : "—"}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-green-400">
+                  <td className="hidden sm:table-cell px-3 py-1.5 text-right tabular-nums text-gray-400">{mids[b.coin] ? fmtPrice(mids[b.coin]) : "—"}</td>
+                  <td className="hidden sm:table-cell px-3 py-1.5 text-right tabular-nums text-green-400">
                     {fmtUsd(b.longUsd)} <span className="text-[10px] text-gray-600">{b.longTraders}</span>
                   </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-red-400">
+                  <td className="hidden sm:table-cell px-3 py-1.5 text-right tabular-nums text-red-400">
                     {fmtUsd(b.shortUsd)} <span className="text-[10px] text-gray-600">{b.shortTraders}</span>
                   </td>
                   <td className="px-3 py-1.5">
@@ -398,7 +409,7 @@ function LiquidationsTab({ positions, mids, caption }: { positions: TrackedPosit
   const totalShort = ladder.reduce((s, b) => s + b.shortUsd, 0);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-col md:min-h-0 md:flex-1">
       {caption}
       <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs">
         {coins.slice(0, 20).map((c) => (
@@ -410,7 +421,7 @@ function LiquidationsTab({ positions, mids, caption }: { positions: TrackedPosit
       {!selected || !price ? (
         <Centered>Aucune position suivie.</Centered>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-bg-border bg-bg-panel p-4">
+        <div className="overflow-auto rounded-lg border border-bg-border bg-bg-panel p-3 md:min-h-0 md:flex-1 md:p-4">
           <div className="mb-3 flex flex-wrap items-baseline gap-x-6 gap-y-1 text-sm">
             <span className="text-gray-300">
               {selected} <span className="tabular-nums text-white">{fmtPrice(price)}</span>
@@ -450,9 +461,22 @@ function LiquidationsTab({ positions, mids, caption }: { positions: TrackedPosit
 }
 
 // --- Primitives ---------------------------------------------------------------------
-function SortTh({ children, active, onClick, help }: { children: ReactNode; active: boolean; onClick: () => void; help?: string }) {
+function SortTh({
+  children,
+  active,
+  onClick,
+  help,
+  secondary,
+}: {
+  children: ReactNode;
+  active: boolean;
+  onClick: () => void;
+  help?: string;
+  /** Masquée sous 640 px. */
+  secondary?: boolean;
+}) {
   return (
-    <th className="whitespace-nowrap px-3 py-2 text-right font-medium">
+    <th className={`whitespace-nowrap px-3 py-2 text-right font-medium ${secondary ? "hidden sm:table-cell" : ""}`}>
       <button onClick={onClick} className={active ? "text-white" : "hover:text-white"}>
         {children}
         {active && <span className="ml-1 text-[10px]">▼</span>}

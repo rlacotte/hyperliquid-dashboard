@@ -10,6 +10,9 @@ import type { ConfluenceScore } from "../types";
 
 export function MarketsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Sous 1024 px, le panneau d'alertes ne tient plus à côté du tableau : on
+  // bascule de l'un à l'autre au lieu de le masquer.
+  const [mobileView, setMobileView] = useState<"markets" | "alerts">("markets");
 
   // Contexte lent (funding, OI, volume) en REST direct ; les prix arrivent en
   // continu par websocket. Cf. hl.allMarkets pour le budget de débit.
@@ -60,8 +63,23 @@ export function MarketsPage() {
   }, [alerts]);
 
   return (
-    <main className="flex flex-1 gap-4 overflow-hidden p-4">
-      <div className="min-w-0 flex-1 overflow-hidden">
+    <main className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 md:p-4 lg:flex-row lg:gap-4">
+      <div className="flex shrink-0 rounded-lg border border-bg-border bg-bg-panel p-0.5 lg:hidden">
+        {(["markets", "alerts"] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => setMobileView(v)}
+            className={`flex-1 rounded-md px-3 py-1.5 text-sm ${mobileView === v ? "bg-bg-hover text-white" : "text-gray-400"}`}
+          >
+            {v === "markets" ? "Marchés" : "Alertes"}
+            {v === "alerts" && (alerts.data?.length ?? 0) > 0 && (
+              <span className="ml-1.5 rounded-full bg-red-500/20 px-1.5 text-xs text-red-300">{alerts.data!.length}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <div className={`min-h-0 min-w-0 flex-1 overflow-hidden ${mobileView === "alerts" ? "hidden lg:block" : ""}`}>
         {markets.error && !markets.data ? (
           <div className="flex h-full items-center justify-center text-red-400">Erreur : {markets.error}</div>
         ) : !markets.data ? (
@@ -78,7 +96,9 @@ export function MarketsPage() {
         )}
       </div>
 
-      <aside className="hidden w-80 shrink-0 overflow-hidden lg:block">
+      <aside
+        className={`min-h-0 overflow-hidden lg:block lg:w-80 lg:flex-none lg:shrink-0 ${mobileView === "alerts" ? "flex-1" : "hidden"}`}
+      >
         <AlertsPanel
           alerts={alerts.data ?? []}
           onAck={handleAck}

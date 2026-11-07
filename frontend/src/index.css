@@ -39,3 +39,8 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #374151;
 }
+
+/* Bandeaux défilant au doigt (navigation, métriques sur téléphone) : la barre
+   de défilement n'apporte rien et mange de la hauteur. */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

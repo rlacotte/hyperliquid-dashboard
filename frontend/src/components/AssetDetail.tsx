@@ -62,14 +62,14 @@ export function AssetDetail({ market, livePx, confluence, onClose }: Props) {
   const chg = market.prevDayPx > 0 ? (px - market.prevDayPx) / market.prevDayPx : 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 sm:p-4" onClick={onClose}>
       <div
         role="dialog"
         aria-label={`Détail ${market.name}`}
-        className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-bg-border bg-bg-panel"
+        className="flex h-full w-full max-w-4xl flex-col overflow-hidden border-bg-border bg-bg-panel sm:h-auto sm:max-h-[90vh] sm:rounded-xl sm:border"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-bg-border p-4">
+        <div className="relative flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-bg-border p-4 pr-14">
           <h2 className="text-xl font-bold text-white">
             {market.name}
             {market.kind === "hip3" && (
@@ -105,13 +105,13 @@ export function AssetDetail({ market, livePx, confluence, onClose }: Props) {
           <button
             onClick={onClose}
             aria-label="Fermer"
-            className="ml-auto rounded-md px-3 py-1 text-gray-400 hover:bg-bg-hover hover:text-white"
+            className="absolute right-2 top-2.5 rounded-md px-3 py-1.5 text-lg text-gray-400 hover:bg-bg-hover hover:text-white"
           >
             ✕
           </button>
         </div>
 
-        <div className="flex-1 space-y-6 overflow-auto p-4">
+        <div className="flex-1 space-y-6 overflow-auto p-3 sm:p-4">
           {confluence && (
             <div>
               <h3 className="mb-2 text-sm font-medium text-gray-300">Score de confluence</h3>

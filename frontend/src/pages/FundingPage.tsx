@@ -38,7 +38,7 @@ export function FundingPage() {
   const [selected, setSelected] = useState<Market | null>(null);
 
   return (
-    <main className="flex flex-1 flex-col overflow-hidden p-4">
+    <main className="flex min-h-0 flex-1 flex-col overflow-auto p-3 md:overflow-hidden md:p-4">
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <h1 className="text-lg font-semibold text-white">Funding</h1>
         <div className="flex rounded-lg border border-bg-border bg-bg-panel p-0.5">
@@ -111,7 +111,7 @@ function ArbTab({ onSelect }: { onSelect: (m: Market) => void }) {
   if (!predicted.data) return <Centered>Chargement des taux prédits…</Centered>;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-col md:min-h-0 md:flex-1">
       <p className="mb-3 max-w-4xl text-xs leading-relaxed text-gray-500">
         Position delta-neutre : <span className="text-gray-300">short</span> là où le funding est le plus élevé,{" "}
         <span className="text-gray-300">long</span> là où il est le plus bas — on encaisse l'écart sans exposition au prix.
@@ -162,13 +162,13 @@ function ArbTab({ onSelect }: { onSelect: (m: Market) => void }) {
         />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-bg-border">
+      <div className="overflow-auto rounded-lg border border-bg-border md:min-h-0 md:flex-1">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-bg-panel text-gray-400">
             <tr>
               <Th align="left">Coin</Th>
               {VENUES.map((v) => (
-                <Th key={v} help={`Funding prédit pour la prochaine période sur ${VENUE_LABEL[v]}, annualisé.`}>
+                <Th key={v} secondary help={`Funding prédit pour la prochaine période sur ${VENUE_LABEL[v]}, annualisé.`}>
                   {VENUE_LABEL[v]}
                 </Th>
               ))}
@@ -176,14 +176,14 @@ function ArbTab({ onSelect }: { onSelect: (m: Market) => void }) {
                 Stratégie
               </Th>
               <Th help="Funding annualisé encaissé par la position delta-neutre, avant frais.">Écart</Th>
-              <Th help="Jours de portage pour que le funding encaissé couvre les frais d'aller-retour, à écart constant.">
+              <Th secondary help="Jours de portage pour que le funding encaissé couvre les frais d'aller-retour, à écart constant.">
                 Rentable en
               </Th>
               <Th help="Depuis quand l'écart dépasse 15 %/an avec cette même paire de plateformes, sans interruption (suivi serveur toutes les 5 min).">
                 Depuis
               </Th>
-              <Th help="Open interest du marché sur Hyperliquid.">OI HL</Th>
-              <Th align="right" help="Hyperliquid règle le funding toutes les heures." last>
+              <Th secondary help="Open interest du marché sur Hyperliquid.">OI HL</Th>
+              <Th secondary align="right" help="Hyperliquid règle le funding toutes les heures." last>
                 Prochain HL
               </Th>
             </tr>
@@ -235,12 +235,12 @@ function ArbLine({
       onClick={() => market && onSelect(market)}
       className={`border-t border-bg-border hover:bg-bg-hover ${market ? "cursor-pointer" : ""}`}
     >
-      <td className="px-3 py-1.5 font-medium text-white">{row.coin}</td>
+      <td className="px-2 py-1.5 font-medium text-white sm:px-3">{row.coin}</td>
       {VENUES.map((v) => {
         const r = row.rates[v];
         const leg = legOf(v);
         return (
-          <td key={v} className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
+          <td key={v} className="hidden sm:table-cell whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
             {r ? (
               <span className="inline-flex items-center gap-1.5">
                 {leg && (
@@ -262,26 +262,26 @@ function ArbLine({
           </td>
         );
       })}
-      <td className="whitespace-nowrap px-3 py-1.5 text-xs text-gray-300">
-        <span className="text-red-300">Short {VENUE_LABEL[short.venue]}</span>
-        <span className="text-gray-600"> · </span>
-        <span className="text-green-300">Long {VENUE_LABEL[long.venue]}</span>
+      <td className="whitespace-nowrap px-2 py-1.5 text-xs text-gray-300 sm:px-3">
+        <span className="block text-red-300 sm:inline">Short {VENUE_LABEL[short.venue]}</span>
+        <span className="hidden text-gray-600 sm:inline"> · </span>
+        <span className="block text-green-300 sm:inline">Long {VENUE_LABEL[long.venue]}</span>
       </td>
-      <td className="px-3 py-1.5 text-right font-semibold tabular-nums text-white">{fmtApr(row.spreadApr)}</td>
-      <td className={`px-3 py-1.5 text-right tabular-nums ${be !== null && be <= 3 ? "text-green-400" : be !== null && be <= 14 ? "text-gray-300" : "text-gray-500"}`}>
+      <td className="px-2 py-1.5 text-right font-semibold tabular-nums text-white sm:px-3">{fmtApr(row.spreadApr)}</td>
+      <td className={`hidden sm:table-cell px-3 py-1.5 text-right tabular-nums ${be !== null && be <= 3 ? "text-green-400" : be !== null && be <= 14 ? "text-gray-300" : "text-gray-500"}`}>
         {be === null ? "—" : be < 1 ? "< 1 j" : `${be.toFixed(1)} j`}
       </td>
       <td
-        className={`whitespace-nowrap px-3 py-1.5 text-right tabular-nums ${
+        className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums sm:px-3 ${
           since !== null && now - since >= PERSISTENT_H * 3600_000 ? "font-semibold text-amber-300" : "text-gray-500"
         }`}
       >
         {since === null ? "—" : fmtDuration(now - since)}
       </td>
-      <td className="px-3 py-1.5 text-right tabular-nums text-gray-400">
+      <td className="hidden sm:table-cell px-3 py-1.5 text-right tabular-nums text-gray-400">
         {market?.openInterestUsd ? fmtUsd(market.openInterestUsd) : "—"}
       </td>
-      <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{hlNext ? fmtCountdown(hlNext - now) : "—"}</td>
+      <td className="hidden sm:table-cell px-3 py-1.5 text-right tabular-nums text-gray-500">{hlNext ? fmtCountdown(hlNext - now) : "—"}</td>
     </tr>
   );
 }
@@ -306,7 +306,7 @@ function ExtremesTab({ onSelect }: { onSelect: (m: Market) => void }) {
   if (!markets.data) return <Centered>Chargement…</Centered>;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-col md:min-h-0 md:flex-1">
       <p className="mb-3 max-w-4xl text-xs leading-relaxed text-gray-500">
         Les funding les plus extrêmes de Hyperliquid, y compris les marchés HIP-3 (actions, matières premières…) qui
         n'existent pas sur Binance ni Bybit et échappent donc à l'arbitrage classique. Un funding extrême signale un
@@ -340,18 +340,18 @@ function ExtremesTab({ onSelect }: { onSelect: (m: Market) => void }) {
         <span className="text-gray-600">{rows.length} marchés</span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-bg-border">
+      <div className="overflow-auto rounded-lg border border-bg-border md:min-h-0 md:flex-1">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-bg-panel text-gray-400">
             <tr>
               <Th align="left">Marché</Th>
-              <Th help="Taux réglé chaque heure.">Funding 1h</Th>
+              <Th secondary help="Taux réglé chaque heure.">Funding 1h</Th>
               <Th help="Le même taux annualisé.">APR</Th>
               <Th align="left" help="Côté qui reçoit le funding : les shorts si le taux est positif, les longs s'il est négatif.">
                 Encaissent
               </Th>
-              <Th>Open interest</Th>
-              <Th last>Volume 24h</Th>
+              <Th secondary>Open interest</Th>
+              <Th secondary last>Volume 24h</Th>
             </tr>
           </thead>
           <tbody>
@@ -367,11 +367,11 @@ function ExtremesTab({ onSelect }: { onSelect: (m: Market) => void }) {
                       </span>
                     )}
                   </td>
-                  <td className={`px-3 py-1.5 text-right tabular-nums ${colorPct(m.funding!)}`}>{fmtFunding(m.funding!)}</td>
+                  <td className={`hidden sm:table-cell px-3 py-1.5 text-right tabular-nums ${colorPct(m.funding!)}`}>{fmtFunding(m.funding!)}</td>
                   <td className={`px-3 py-1.5 text-right font-semibold tabular-nums ${colorPct(apr)}`}>{fmtApr(apr)}</td>
                   <td className="px-3 py-1.5 text-xs text-gray-300">{m.funding! > 0 ? "Shorts" : m.funding! < 0 ? "Longs" : "—"}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-gray-400">{fmtUsd(m.openInterestUsd ?? 0)}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-gray-400">{fmtUsd(m.volume24h)}</td>
+                  <td className="hidden sm:table-cell px-3 py-1.5 text-right tabular-nums text-gray-400">{fmtUsd(m.openInterestUsd ?? 0)}</td>
+                  <td className="hidden sm:table-cell px-3 py-1.5 text-right tabular-nums text-gray-400">{fmtUsd(m.volume24h)}</td>
                 </tr>
               );
             })}
@@ -388,14 +388,21 @@ function Th({
   align = "right",
   help,
   last,
+  secondary,
 }: {
   children: ReactNode;
   align?: "left" | "right";
   help?: string;
   last?: boolean;
+  /** Masquée sous 640 px. */
+  secondary?: boolean;
 }) {
   return (
-    <th className={`whitespace-nowrap px-3 py-2.5 font-medium ${align === "left" ? "text-left" : "text-right"}`}>
+    <th
+      className={`whitespace-nowrap px-2 py-2.5 font-medium sm:px-3 ${align === "left" ? "text-left" : "text-right"} ${
+        secondary ? "hidden sm:table-cell" : ""
+      }`}
+    >
       {children}
       {help && <InfoTip text={help} align={last ? "right" : "center"} />}
     </th>

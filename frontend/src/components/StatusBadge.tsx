@@ -33,10 +33,11 @@ export function StatusBadge({ ws, signalsTs, signalsError }: Props) {
           : { dot: "bg-amber-500", text: "text-amber-400", label: `figés ${fmtAge(Date.now() - (signalsTs as number))}` };
 
   return (
-    <span className="flex items-center gap-3 text-xs">
+    <span className="flex items-center gap-2 text-xs sm:gap-3">
       <span className="flex items-center gap-1.5" title="Prix en direct par websocket Hyperliquid">
         <span className={`h-2 w-2 rounded-full ${wsLive ? "animate-pulse bg-green-500" : "bg-amber-500"}`} />
-        <span className={wsLive ? "text-gray-400" : "text-amber-400"}>
+        {/* Mobile : pastilles seules, le texte reste dans l'infobulle. */}
+        <span className={`hidden sm:inline ${wsLive ? "text-gray-400" : "text-amber-400"}`}>
           Prix {wsLive ? "live" : ws === "idle" ? "…" : "reconnexion…"}
         </span>
       </span>
@@ -45,7 +46,7 @@ export function StatusBadge({ ws, signalsTs, signalsError }: Props) {
         title={signalsError ?? "Alertes et régimes, recalculés à chaque cycle de collecte serveur (chaque minute)"}
       >
         <span className={`h-2 w-2 rounded-full ${sigView.dot}`} />
-        <span className={sigView.text}>Signaux {sigView.label}</span>
+        <span className={`hidden sm:inline ${sigView.text}`}>Signaux {sigView.label}</span>
       </span>
     </span>
   );

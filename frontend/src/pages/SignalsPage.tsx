@@ -21,7 +21,7 @@ export function SignalsPage() {
   );
 
   return (
-    <main className="flex flex-1 flex-col gap-4 overflow-auto p-4">
+    <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-3 md:p-4">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-lg font-semibold text-white">Track record des signaux</h1>
         <div className="flex rounded-lg border border-bg-border bg-bg-panel p-0.5 text-sm">
@@ -75,14 +75,14 @@ export function SignalsPage() {
             <thead className="bg-bg-panel text-xs text-gray-400">
               <tr>
                 <Th align="left">Signal</Th>
-                <Th help="Alertes de ce type dont l'horizon choisi est mesuré.">Cas</Th>
-                <Th help="Part des cas où le prix a monté sur l'horizon.">Hausse</Th>
-                <Th>Moyen</Th>
-                <Th help="Plus robuste que la moyenne aux mouvements extrêmes.">Médian</Th>
+                <Th secondary help="Alertes de ce type dont l'horizon choisi est mesuré.">Cas</Th>
+                <Th secondary help="Part des cas où le prix a monté sur l'horizon.">Hausse</Th>
+                <Th secondary>Moyen</Th>
+                <Th secondary help="Plus robuste que la moyenne aux mouvements extrêmes.">Médian</Th>
                 <Th help="Crypto : rendement du coin moins celui du BTC sur la même fenêtre. HIP-3 : rendement brut (pas de référence commune à des actions, de l'or et des devises).">vs réf.</Th>
-                <Th help="Crypto : part des cas où le coin a fait mieux que le BTC. HIP-3 : part des cas en hausse.">Bat la réf.</Th>
-                <Th help="Épisodes indépendants : alertes regroupées par coin et par jour. C'est l'effectif réel du test.">Épisodes</Th>
-                <Th help="Horizon 24 h : part des jours ORDINAIRES où ces mêmes coins ont battu le BTC sur la même période. C'est la référence du verdict.">
+                <Th secondary help="Crypto : part des cas où le coin a fait mieux que le BTC. HIP-3 : part des cas en hausse.">Bat la réf.</Th>
+                <Th secondary help="Épisodes indépendants : alertes regroupées par coin et par jour. C'est l'effectif réel du test.">Épisodes</Th>
+                <Th secondary help="Horizon 24 h : part des jours ORDINAIRES où ces mêmes coins ont battu le BTC sur la même période. C'est la référence du verdict.">
                   Témoin
                 </Th>
                 <Th align="left" last>
@@ -125,16 +125,16 @@ function GroupRow({ g, h }: { g: TrackGroup; h: HorizonKey }) {
           {g.alerts} alertes · {g.coins} {g.segment === "hip3" ? "marchés" : "coins"}
         </div>
       </td>
-      <td className="px-3 py-2 text-right tabular-nums text-gray-300">{s.n || "—"}</td>
-      <td className="px-3 py-2 text-right tabular-nums text-gray-300">{share(s.p_up)}</td>
-      <td className={`px-3 py-2 text-right tabular-nums ${s.mean === undefined ? "text-gray-600" : colorPct(s.mean)}`}>{pct(s.mean)}</td>
-      <td className={`px-3 py-2 text-right tabular-nums ${s.median === undefined ? "text-gray-600" : colorPct(s.median)}`}>{pct(s.median)}</td>
+      <td className="hidden sm:table-cell px-3 py-2 text-right tabular-nums text-gray-300">{s.n || "—"}</td>
+      <td className="hidden sm:table-cell px-3 py-2 text-right tabular-nums text-gray-300">{share(s.p_up)}</td>
+      <td className={`hidden sm:table-cell px-3 py-2 text-right tabular-nums ${s.mean === undefined ? "text-gray-600" : colorPct(s.mean)}`}>{pct(s.mean)}</td>
+      <td className={`hidden sm:table-cell px-3 py-2 text-right tabular-nums ${s.median === undefined ? "text-gray-600" : colorPct(s.median)}`}>{pct(s.median)}</td>
       <td className={`px-3 py-2 text-right font-semibold tabular-nums ${s.mean_vs_btc == null ? "text-gray-600" : colorPct(s.mean_vs_btc)}`}>
         {pct(s.mean_vs_btc)}
       </td>
-      <td className="px-3 py-2 text-right tabular-nums text-gray-300">{share(s.p_beat_btc)}</td>
-      <td className="px-3 py-2 text-right tabular-nums text-gray-400">{s.n_clusters ?? "—"}</td>
-      <td className="px-3 py-2 text-right tabular-nums text-gray-400" title={s.baseline_n ? `${s.baseline_n} jours ordinaires` : undefined}>
+      <td className="hidden sm:table-cell px-3 py-2 text-right tabular-nums text-gray-300">{share(s.p_beat_btc)}</td>
+      <td className="hidden sm:table-cell px-3 py-2 text-right tabular-nums text-gray-400">{s.n_clusters ?? "—"}</td>
+      <td className="hidden sm:table-cell px-3 py-2 text-right tabular-nums text-gray-400" title={s.baseline_n ? `${s.baseline_n} jours ordinaires` : undefined}>
         {s.baseline_p_beat !== undefined ? share(s.baseline_p_beat) : "—"}
       </td>
       <td className={`px-3 py-2 text-xs ${tone}`}>
@@ -145,9 +145,22 @@ function GroupRow({ g, h }: { g: TrackGroup; h: HorizonKey }) {
   );
 }
 
-function Th({ children, align = "right", help, last }: { children: ReactNode; align?: "left" | "right"; help?: string; last?: boolean }) {
+function Th({
+  children,
+  align = "right",
+  help,
+  last,
+  secondary,
+}: {
+  children: ReactNode;
+  align?: "left" | "right";
+  help?: string;
+  last?: boolean;
+  /** Masquée sous 640 px : sur téléphone, signal / vs réf. / verdict. */
+  secondary?: boolean;
+}) {
   return (
-    <th className={`whitespace-nowrap px-3 py-2 font-medium ${align === "left" ? "text-left" : "text-right"}`}>
+    <th className={`whitespace-nowrap px-3 py-2 font-medium ${align === "left" ? "text-left" : "text-right"} ${secondary ? "hidden sm:table-cell" : ""}`}>
       {children}
       {help && <InfoTip text={help} align={last ? "right" : "center"} />}
     </th>

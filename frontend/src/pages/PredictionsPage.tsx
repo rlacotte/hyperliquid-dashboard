@@ -62,7 +62,7 @@ export function PredictionsPage() {
   const mids = useLiveMidsAll(dexs);
 
   return (
-    <main className="flex flex-1 flex-col gap-4 overflow-auto p-4">
+    <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-3 md:p-4">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-lg font-semibold text-white">Prédictions de prix</h1>
         {ladders.data && (
@@ -194,7 +194,7 @@ function LadderCard({ ladder, dist, price }: { ladder: Ladder; dist: Distributio
             price !== undefined && (b.from === null || price >= b.from) && (b.to === null || price < b.to);
           return (
             <div key={i} className="flex items-center gap-2 text-xs">
-              <span className={`w-36 shrink-0 text-right tabular-nums ${containsPrice ? "font-semibold text-blue-300" : "text-gray-500"}`}>
+              <span className={`w-28 shrink-0 text-right tabular-nums sm:w-36 ${containsPrice ? "font-semibold text-blue-300" : "text-gray-500"}`}>
                 {b.from === null ? `< ${fmtPrice(b.to!)}` : b.to === null ? `≥ ${fmtPrice(b.from)}` : `${fmtPrice(b.from)} – ${fmtPrice(b.to)}`}
               </span>
               <div className="h-3 flex-1 rounded-sm bg-bg-hover">
