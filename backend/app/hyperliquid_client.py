@@ -102,6 +102,14 @@ class HyperliquidClient:
         data = await self._post_info({"type": "allMids"})
         return data.get("mids", {})
 
+    # --- Données par compte ---------------------------------------------------
+    async def get_user_fills_since(self, user: str, start_ms: int) -> list[dict]:
+        """Fills d'un compte depuis `start_ms` (inclus), ordre chronologique,
+        tous DEX confondus. Plafonné à 2000 par réponse : au-delà, le lot
+        suivant repart du dernier fill reçu."""
+        data = await self._post_info({"type": "userFillsByTime", "user": user, "startTime": start_ms})
+        return data if isinstance(data, list) else []
+
     # --- Données par actif ---------------------------------------------------
     async def get_candles(
         self, coin: str, interval: str, start_ms: int, end_ms: int | None = None

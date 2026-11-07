@@ -208,6 +208,15 @@ async def _poll_with(client: HyperliquidClient) -> dict:
     except Exception:
         logger.exception("Erreur notifications")
 
+    # Bot Telegram : alertes critiques aux abonnés qui l'ont demandé, puis
+    # mouvements des wallets suivis (no-op sans token).
+    telegram_info = None
+    try:
+        from . import telegram_bot
+        telegram_info = await telegram_bot.run_cycle(client, created, now_ms)
+    except Exception:
+        logger.exception("Erreur bot Telegram")
+
     # Métriques globales (agrégats HL + sources externes cache-ées)
     try:
         from . import global_metrics
@@ -248,6 +257,7 @@ async def _poll_with(client: HyperliquidClient) -> dict:
         "alerts_delta": delta,
         "alerts_created": len(created),
         "notified": notified,
+        "telegram": telegram_info,
         "leaderboard": leaderboard_info,
         "track_record": track_info,
         "maintenance": maintenance,

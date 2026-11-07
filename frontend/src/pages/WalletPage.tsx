@@ -15,6 +15,7 @@ import { describe as describeAction } from "../walletActivity";
 import { colorPct, fmtAgo, fmtPct, fmtPrice, fmtUsd, fmtUsdSigned } from "../format";
 import { AreaChart } from "../components/AreaChart";
 import { InfoTip } from "../components/InfoTip";
+import { TelegramLink } from "../components/TelegramLink";
 import { LivePrice } from "../components/LivePrice";
 
 const WEEK_MS = 7 * 86400_000;
@@ -585,7 +586,7 @@ function ActivityPanel({ onRename }: { onRename: (addr: string) => void }) {
       <div className="mb-2 flex flex-wrap items-center gap-3">
         <h3 className="flex items-center text-sm font-medium text-gray-300">
           Activité en direct des wallets suivis
-          <InfoTip text="Ouvertures, renforcements, réductions, clôtures et liquidations des wallets que vous suivez, en temps réel. Les exécutions d'un même marché à quelques secondes d'intervalle sont regroupées en une action. Un onglet du dashboard doit rester ouvert : sans compte, aucun serveur ne peut vous prévenir hors ligne." />
+          <InfoTip text="Ouvertures, renforcements, réductions, clôtures et liquidations des wallets que vous suivez, en temps réel. Les exécutions d'un même marché à quelques secondes d'intervalle sont regroupées en une action. Les notifications du navigateur exigent un onglet ouvert ; reliez Telegram pour être prévenu onglet fermé (vérification chaque minute, sans compte)." />
         </h3>
         <div className="ml-auto flex flex-wrap items-center gap-2 text-xs">
           <label className="flex items-center gap-1.5 text-gray-400">
@@ -602,6 +603,7 @@ function ActivityPanel({ onRename }: { onRename: (addr: string) => void }) {
               ))}
             </select>
           </label>
+          <TelegramLink />
           {permission === "unsupported" ? (
             <span className="text-gray-600">Notifications non prises en charge par ce navigateur</span>
           ) : permission === "denied" ? (

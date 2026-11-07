@@ -6,6 +6,7 @@ import { pushActivity, useNotifySettings, useWatchlist } from "../stores";
 import { shortAddr } from "../wallet";
 import { ActivityBuilder, describe, type WalletAction } from "../walletActivity";
 import { fmtUsd } from "../format";
+import { useTelegramSync } from "../hooks/useTelegramSync";
 
 const TOAST_MS = 8_000;
 const MAX_TOASTS = 4;
@@ -29,6 +30,8 @@ export function WalletWatcher() {
   const labelsRef = useRef(new Map<string, string>());
   labelsRef.current = new Map(watch.map((w) => [w.address, w.label]));
   const [toasts, setToasts] = useState<WalletAction[]>([]);
+  // Hors ligne : le bot Telegram suit côté serveur la même liste, même seuil.
+  useTelegramSync();
 
   const key = watch
     .map((w) => w.address)

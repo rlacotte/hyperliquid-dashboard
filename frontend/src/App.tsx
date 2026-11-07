@@ -41,19 +41,20 @@ export default function App() {
       <header className="border-b border-bg-border bg-bg-panel">
         <div className="flex items-center gap-3 px-3 py-2 md:gap-4 md:px-6 md:py-2.5">
           <a href="#/markets" className="shrink-0 text-base font-bold text-white md:text-lg">
-            <span className="text-blue-500">⚡</span> <span className="hidden sm:inline">Hyperliquid Dashboard</span>
-            <span className="sm:hidden">Hyperliquid</span>
+            {/* Nom complet seulement quand la navigation tient à côté (≥ 1280 px). */}
+            <span className="text-blue-500">⚡</span> <span className="hidden xl:inline">Hyperliquid Dashboard</span>
+            <span className="xl:hidden">Hyperliquid</span>
           </a>
-          <div className="hidden min-w-0 md:block">
+          <div className="hidden min-w-0 lg:block">
             <Nav items={NAV} current={route.page} />
           </div>
           <div className="ml-auto shrink-0">
             <StatusBadge ws={ws} signalsTs={signalsTs} signalsError={health.error} />
           </div>
         </div>
-        {/* Mobile : navigation sur sa propre ligne, défilable — sept sections
-            ne tiennent pas à côté du logo sur 375 px. */}
-        <div className="no-scrollbar overflow-x-auto px-2 pb-1.5 md:hidden">
+        {/* Sous 1024 px, navigation sur sa propre ligne, défilable : sept
+            sections + logo + état (~1000 px) ne tiennent pas sur une ligne. */}
+        <div className="no-scrollbar overflow-x-auto px-2 pb-1.5 lg:hidden">
           <Nav items={NAV} current={route.page} />
         </div>
       </header>

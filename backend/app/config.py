@@ -132,6 +132,18 @@ DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
 # mériter une interruption.
 NOTIFY_MIN_SEVERITY = os.getenv("NOTIFY_MIN_SEVERITY", "critical")
 
+# --- Bot Telegram (abonnements individuels) -----------------------------------
+# Le même TELEGRAM_BOT_TOKEN sert au bot : chaque visiteur relie sa liste de
+# wallets suivis à sa propre conversation, sans compte. Sans token, le bot est
+# simplement absent de l'interface.
+PUBLIC_URL = os.getenv("PUBLIC_URL", "https://hyperliquid-dashboard-mocha.vercel.app").rstrip("/")
+# Wallets lus par cycle (une requête userFillsByTime, poids ~20, chacun) : au-delà,
+# la lecture tourne et chaque wallet est vu moins souvent qu'une fois par minute.
+TG_MAX_WALLETS_PER_CYCLE = int(os.getenv("TG_MAX_WALLETS_PER_CYCLE", "25"))
+TG_MAX_WALLETS_PER_SUB = int(os.getenv("TG_MAX_WALLETS_PER_SUB", "25"))
+# Abonnements non reliés créés sur 24 h : borne contre le remplissage de la base.
+TG_MAX_PENDING_SUBS = int(os.getenv("TG_MAX_PENDING_SUBS", "500"))
+
 # --- Frontend ----------------------------------------------------------------
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
 

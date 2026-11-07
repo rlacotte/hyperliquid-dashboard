@@ -209,6 +209,46 @@ def init_db() -> None:
             """
         )
 
+        # Bot Telegram. Pas de compte utilisateur : un navigateur crée un
+        # abonnement identifié par un code aléatoire (seul son empreinte est
+        # stockée), que Telegram nous renvoie quand l'utilisateur appuie sur
+        # « Démarrer » — c'est ce qui relie le code à une conversation.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tg_subs (
+                code_hash TEXT PRIMARY KEY,
+                chat_id BIGINT,
+                created_ts BIGINT NOT NULL,
+                linked_ts BIGINT,
+                min_notional DOUBLE PRECISION NOT NULL DEFAULT 25000,
+                critical_alerts BOOLEAN NOT NULL DEFAULT FALSE
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tg_subs_chat ON tg_subs(chat_id)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tg_wallets (
+                code_hash TEXT NOT NULL REFERENCES tg_subs(code_hash) ON DELETE CASCADE,
+                address TEXT NOT NULL,
+                label TEXT NOT NULL,
+                PRIMARY KEY (code_hash, address)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tg_wallets_addr ON tg_wallets(address)")
+        # Curseur de lecture par wallet, partagé entre abonnés : un wallet suivi
+        # par dix personnes n'est interrogé qu'une fois par passage.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS wallet_cursors (
+                address TEXT PRIMARY KEY,
+                cursor_ms BIGINT NOT NULL,
+                checked_ts BIGINT NOT NULL DEFAULT 0
+            )
+            """
+        )
+
         # Migration unique : avant la double résolution, les alertes de plus de
         # ~52 jours étaient tentées en bougies de 15 min (indisponibles si loin)
         # et épuisaient leurs tentatives sans mesure. On les réarme une fois ;
@@ -894,3 +934,147 @@ def downsample_global_metrics() -> int:
             cur = conn.execute(f"DELETE FROM global_metrics_history WHERE id IN ({placeholders})", chunk)
             deleted += cur.rowcount
         return deleted
+
+
+# --- Bot Telegram -------------------------------------------------------------------
+def tg_create_sub(code_hash: str, now_ms: int, min_notional: float) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO tg_subs (code_hash, created_ts, min_notional) VALUES (%s, %s, %s)",
+            (code_hash, now_ms, min_notional),
+        )
+
+
+def tg_count_pending(since_ms: int) -> int:
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT count(*) AS n FROM tg_subs WHERE chat_id IS NULL AND created_ts > %s", (since_ms,)
+        ).fetchone()["n"]
+
+
+def tg_get_sub(code_hash: str) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT s.code_hash, s.chat_id, s.linked_ts, s.min_notional, s.critical_alerts, "
+            "(SELECT count(*) FROM tg_wallets w WHERE w.code_hash = s.code_hash) AS wallets "
+            "FROM tg_subs s WHERE s.code_hash = %s",
+            (code_hash,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def tg_link(code_hash: str, chat_id: int, now_ms: int) -> bool:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE tg_subs SET chat_id = %s, linked_ts = %s WHERE code_hash = %s",
+            (chat_id, now_ms, code_hash),
+        )
+        return cur.rowcount > 0
+
+
+def tg_unlink_chat(chat_id: int) -> int:
+    """/stop : la conversation ne reçoit plus rien, quel que soit le navigateur."""
+    with get_conn() as conn:
+        return conn.execute("DELETE FROM tg_subs WHERE chat_id = %s", (chat_id,)).rowcount
+
+
+def tg_delete_sub(code_hash: str) -> int | None:
+    with get_conn() as conn:
+        row = conn.execute("DELETE FROM tg_subs WHERE code_hash = %s RETURNING chat_id", (code_hash,)).fetchone()
+    return row["chat_id"] if row else None
+
+
+def tg_update_sub(
+    code_hash: str, min_notional: float, critical_alerts: bool, wallets: list[tuple[str, str]], now_ms: int
+) -> bool:
+    """Remplace la liste suivie d'un abonnement. Un wallet nouveau pour le
+    serveur démarre son curseur maintenant : pas d'historique envoyé d'un coup."""
+    with get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE tg_subs SET min_notional = %s, critical_alerts = %s WHERE code_hash = %s",
+            (min_notional, critical_alerts, code_hash),
+        )
+        if cur.rowcount == 0:
+            return False
+        conn.execute("DELETE FROM tg_wallets WHERE code_hash = %s", (code_hash,))
+        with conn.cursor() as c:
+            if wallets:
+                c.executemany(
+                    "INSERT INTO tg_wallets (code_hash, address, label) VALUES (%s, %s, %s)",
+                    [(code_hash, a, label) for a, label in wallets],
+                )
+                c.executemany(
+                    "INSERT INTO wallet_cursors (address, cursor_ms) VALUES (%s, %s) ON CONFLICT (address) DO NOTHING",
+                    [(a, now_ms) for a, _ in wallets],
+                )
+        return True
+
+
+def tg_chat_wallet_count(chat_id: int) -> int:
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT count(DISTINCT w.address) AS n FROM tg_wallets w JOIN tg_subs s USING (code_hash) WHERE s.chat_id = %s",
+            (chat_id,),
+        ).fetchone()["n"]
+
+
+def tg_watch_batch(limit: int) -> list[dict]:
+    """Wallets suivis par au moins un abonnement relié, les moins récemment
+    lus d'abord : au-delà de `limit`, la lecture tourne entre les cycles."""
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            SELECT c.address, c.cursor_ms
+            FROM wallet_cursors c
+            WHERE EXISTS (
+                SELECT 1 FROM tg_wallets w JOIN tg_subs s USING (code_hash)
+                WHERE w.address = c.address AND s.chat_id IS NOT NULL
+            )
+            ORDER BY c.checked_ts
+            LIMIT %s
+            """,
+            (limit,),
+        ).fetchall()
+
+
+def tg_watchers(addresses: list[str]) -> list[dict]:
+    if not addresses:
+        return []
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT w.address, w.label, s.chat_id, s.min_notional FROM tg_wallets w "
+            "JOIN tg_subs s USING (code_hash) WHERE s.chat_id IS NOT NULL AND w.address = ANY(%s)",
+            (addresses,),
+        ).fetchall()
+
+
+def tg_update_cursors(rows: list[tuple[str, int, int]]) -> None:
+    """rows : (adresse, curseur, heure de lecture)."""
+    if not rows:
+        return
+    with get_conn() as conn:
+        with conn.cursor() as c:
+            c.executemany(
+                "UPDATE wallet_cursors SET cursor_ms = %s, checked_ts = %s WHERE address = %s",
+                [(cursor, checked, a) for a, cursor, checked in rows],
+            )
+
+
+def tg_alert_chats() -> list[int]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT chat_id FROM tg_subs WHERE chat_id IS NOT NULL AND critical_alerts"
+        ).fetchall()
+    return [r["chat_id"] for r in rows]
+
+
+def tg_gc(now_ms: int) -> dict:
+    """Abonnements jamais reliés après 24 h, curseurs devenus orphelins."""
+    with get_conn() as conn:
+        subs = conn.execute(
+            "DELETE FROM tg_subs WHERE chat_id IS NULL AND created_ts < %s", (now_ms - 86400_000,)
+        ).rowcount
+        cursors = conn.execute(
+            "DELETE FROM wallet_cursors c WHERE NOT EXISTS (SELECT 1 FROM tg_wallets w WHERE w.address = c.address)"
+        ).rowcount
+    return {"subs": subs, "cursors": cursors}

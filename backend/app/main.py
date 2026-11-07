@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import cache, config, db, poller
 from .hyperliquid_client import get_client
-from .routes import alerts, cron, funding_arb, global_metrics, leaderboard, markets, replay, signals
+from .routes import alerts, cron, funding_arb, global_metrics, leaderboard, markets, replay, signals, telegram
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +75,7 @@ app.include_router(replay.router)
 app.include_router(leaderboard.router)
 app.include_router(signals.router)
 app.include_router(funding_arb.router)
+app.include_router(telegram.router)
 
 
 # --- Cache CDN sur les routes de lecture --------------------------------------
@@ -98,6 +99,8 @@ _CACHE_RULES: tuple[tuple[re.Pattern, int], ...] = (
     (re.compile(r"^/api/leaderboard$"), 300),
     (re.compile(r"^/api/track-record$"), 300),
     (re.compile(r"^/api/funding-arb$"), 60),
+    # Nom du bot : ne change qu'à sa (re)configuration.
+    (re.compile(r"^/api/telegram/info$"), 300),
     (re.compile(r"^/api/markets/[^/]+/(candles|funding)$"), 60),
 )
 

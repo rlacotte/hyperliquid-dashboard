@@ -14,6 +14,12 @@ import type {
 // distant si le front est déployé séparément.
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const resp = await fetch(`${BASE}${path}`);
   if (!resp.ok) {
@@ -63,9 +69,43 @@ export const api = {
     if (!resp.ok) throw new Error(`API ${resp.status}`);
     return resp.json();
   },
+  telegram: {
+    info: () => getJson<{ enabled: boolean; bot: string | null }>("/api/telegram/info"),
+    create: (minNotional: number) =>
+      sendJson<{ code: string; link: string; bot: string }>("POST", "/api/telegram/subscription", null, { min_notional: minNotional }),
+    status: (code: string) => sendJson<TelegramSub>("GET", "/api/telegram/subscription", code),
+    update: (code: string, body: { wallets: { address: string; label: string }[]; min_notional: number; critical_alerts: boolean }) =>
+      sendJson<TelegramSub>("PUT", "/api/telegram/subscription", code, body),
+    remove: (code: string) => sendJson<{ deleted: boolean }>("DELETE", "/api/telegram/subscription", code),
+  },
   ackAll: async (): Promise<{ acknowledged: number }> => {
     const resp = await fetch(`${BASE}/api/alerts/ack-all`, { method: "POST" });
     if (!resp.ok) throw new Error(`API ${resp.status}`);
     return resp.json();
   },
 };
+
+export interface TelegramSub {
+  linked: boolean;
+  wallets: number;
+  min_notional: number;
+  critical_alerts: boolean;
+}
+
+/** Le code d'abonnement voyage en en-tête : les URLs finissent dans les journaux. */
+async function sendJson<T>(method: string, path: string, code: string | null, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (code) headers["X-Subscription-Code"] = code;
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const resp = await fetch(`${BASE}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), cache: "no-store" });
+  if (!resp.ok) {
+    let detail = `${resp.status}`;
+    try {
+      detail = (await resp.json()).detail ?? detail;
+    } catch {
+      /* corps non JSON */
+    }
+    throw new ApiError(resp.status, String(detail));
+  }
+  return resp.json() as Promise<T>;
+}

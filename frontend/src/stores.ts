@@ -44,6 +44,7 @@ if (typeof window !== "undefined") {
   window.addEventListener("storage", (e) => {
     if (e.key === "hl-dashboard:watchlist") watchlistStore.set(loadWatchlist());
     if (e.key === NOTIFY_KEY) notifySettingsStore.set(loadNotifySettings());
+    if (e.key === TELEGRAM_KEY) telegramStore.set(loadTelegram());
   });
 }
 
@@ -75,6 +76,41 @@ export const notifySettingsStore = createStore<NotifySettings>(loadNotifySetting
   }
 });
 export const useNotifySettings = () => useStore(notifySettingsStore);
+
+// --- Abonnement Telegram ---------------------------------------------------------------
+/**
+ * Le code d'abonnement est la seule « identité » de ce navigateur auprès du
+ * bot : il permet de modifier la liste suivie par la conversation reliée.
+ * Gardé en local, envoyé en en-tête, jamais dans une URL du dashboard.
+ */
+export interface TelegramState {
+  code: string | null;
+  linked: boolean;
+  /** Recevoir aussi les alertes critiques du marché. */
+  critical: boolean;
+}
+
+const TELEGRAM_KEY = "hl-dashboard:telegram";
+const TELEGRAM_DEFAULT: TelegramState = { code: null, linked: false, critical: false };
+
+function loadTelegram(): TelegramState {
+  try {
+    const raw = localStorage.getItem(TELEGRAM_KEY);
+    return raw ? { ...TELEGRAM_DEFAULT, ...JSON.parse(raw) } : TELEGRAM_DEFAULT;
+  } catch {
+    return TELEGRAM_DEFAULT;
+  }
+}
+
+export const telegramStore = createStore<TelegramState>(loadTelegram(), (v) => {
+  try {
+    localStorage.setItem(TELEGRAM_KEY, JSON.stringify(v));
+  } catch {
+    /* stockage indisponible : abonnement perdu à la fermeture de l'onglet */
+  }
+});
+export const useTelegram = () => useStore(telegramStore);
+export const resetTelegram = () => telegramStore.set(TELEGRAM_DEFAULT);
 
 // --- Fil d'activité (session) --------------------------------------------------------
 const ACTIVITY_MAX = 200;
