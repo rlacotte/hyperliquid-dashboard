@@ -670,6 +670,8 @@ def pending_alert_outcomes(now_ms: int, horizon_ms: list[int], lookback_days: in
               -- Un arbitrage delta-neutre ne se juge pas à la hausse du coin :
               -- il est exclu du track record de prix.
               AND a.criterion <> 'funding_arb'
+              -- OI tombé à zéro : fermeture de marché, pas un signal.
+              AND NOT (a.criterion = 'open_interest' AND COALESCE((a.details->>'oi_now')::float, 1) <= 0)
               AND COALESCE(o.attempts, 0) < %(max_attempts)s
               AND (
                     (o.ret_1h IS NULL AND COALESCE(o.resolution_min, 15) = 15 AND a.ts < %(t1)s)

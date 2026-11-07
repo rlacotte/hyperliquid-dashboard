@@ -151,7 +151,13 @@ def evaluate_funding(asset: AssetMarket, w: _CycleWriter) -> None:
 # --- Critère 2 : Pic d'Open Interest ----------------------------------------
 def evaluate_open_interest(asset: AssetMarket, ctx: HistoryContext, w: _CycleWriter) -> None:
     prev = ctx.snapshot_at_oi_lookback(asset.coin)
-    if prev is None or prev["open_interest"] <= 0:
+    if prev is None:
+        return
+    if asset.open_interest <= 0 or prev["open_interest"] <= 0:
+        # OI nul d'un côté de la fenêtre : marché fermé ou en cours de retrait,
+        # pas un mouvement de positionnement. Avant ce garde-fou, une alerte
+        # née d'un OI tombé à zéro ne pouvait plus jamais se clore.
+        w.resolve(asset.coin, Criterion.OPEN_INTEREST, "OI nul (marché fermé)")
         return
     delta_pct = (asset.open_interest - prev["open_interest"]) / prev["open_interest"]
     severity = _severity_from_thresholds(
@@ -382,8 +388,15 @@ def evaluate_funding_arb(state: dict[str, dict], now_ms: int, w: _CycleWriter) -
             w.resolve(coin, Criterion.FUNDING_ARB, "écart de funding sorti du suivi")
 
 
+def _dex_of(coin: str) -> str:
+    return coin.split(":", 1)[0] if ":" in coin else ""
+
+
 def evaluate_all(
-    assets: list[AssetMarket], ctx: HistoryContext, arb_state: dict[str, dict] | None = None
+    assets: list[AssetMarket],
+    ctx: HistoryContext,
+    arb_state: dict[str, dict] | None = None,
+    covered_dexs: set[str] | None = None,
 ) -> tuple[int, int, list[tuple]]:
     """Évalue tous les critères.
 
@@ -407,6 +420,17 @@ def evaluate_all(
             evaluate_price_change(asset, ctx, writer)
         except Exception:
             logger.exception("Erreur évaluation alertes pour %s", asset.coin)
+
+    # Étape 1 bis : alertes orphelines. Un marché qui disparaît de la collecte
+    # (retiré de la cote, HIP-3 passé sous le seuil d'activité) n'est plus
+    # évalué, donc plus jamais résolu : on clôt ses alertes, mais seulement si
+    # son DEX a bien été lu ce cycle — un DEX en panne n'est pas un retrait.
+    if covered_dexs is not None:
+        present = {a.coin for a in assets}
+        for coin, crit in list(writer.active_keys()):
+            if crit == Criterion.FUNDING_ARB.value or coin in present or _dex_of(coin) not in covered_dexs:
+                continue
+            writer.resolve(coin, Criterion(crit), "marché absent de la collecte (retiré ou inactif)")
 
     # Étape 2 : score de confluence par coin (agrégation directionnelle)
     confluence_results: list[ConfluenceResult] = []

@@ -23,7 +23,10 @@ def _build_assets(universe: list[dict], asset_ctxs: list[dict], mids: dict) -> l
     assets: list[AssetMarket] = []
     for meta, ctx in zip(universe, asset_ctxs):
         coin = meta.get("name", "")
-        if not coin:
+        # Marché retiré de la cote : plus de négociation, son OI tombe à zéro.
+        # L'évaluer produisait une fausse alerte « OI −100 % » critique, restée
+        # active des mois (VINE, retiré le 26 août 2026).
+        if not coin or meta.get("isDelisted"):
             continue
         mark_px = float(ctx.get("markPx", 0) or 0)
         prev_day_px = float(ctx.get("prevDayPx", 0) or 0)
@@ -107,28 +110,31 @@ async def _hip3_plan(client: HyperliquidClient, now_ms: int) -> tuple[list[str],
     return await client.get_perp_dexs(), True
 
 
-async def _hip3_assets(client: HyperliquidClient, now_ms: int) -> tuple[list[AssetMarket], list[str]]:
+async def _hip3_assets(client: HyperliquidClient, now_ms: int) -> tuple[list[AssetMarket], list[str], list[str]]:
     """Marchés HIP-3 actifs, DEX interrogés en parallèle.
 
     Un DEX en échec n'interrompt pas le cycle : le DEX principal reste la
-    donnée critique. Renvoie aussi la liste des DEX en échec, pour le compte
-    rendu du cycle.
+    donnée critique. Renvoie (actifs retenus, DEX en échec pour le compte rendu
+    du cycle, DEX lus avec succès — seuls ceux-là peuvent clore les alertes
+    d'un marché disparu).
     """
     if not config.HIP3_ENABLED:
-        return [], []
+        return [], [], []
     try:
         dexs, full_scan = await _hip3_plan(client, now_ms)
     except Exception:
         logger.exception("Liste des DEX HIP-3 indisponible")
-        return [], ["*"]
+        return [], ["*"], []
     results = await asyncio.gather(*(client.get_meta_and_asset_ctxs(d) for d in dexs), return_exceptions=True)
     assets: list[AssetMarket] = []
     failed: list[str] = []
     active: list[str] = []
+    scanned: list[str] = []
     for dex, res in zip(dexs, results):
         if isinstance(res, Exception):
             failed.append(dex)
             continue
+        scanned.append(dex)
         universe, ctxs = res
         # Pas de mids websocket pour HIP-3 côté serveur : le midPx du contexte suffit.
         kept = [
@@ -142,7 +148,7 @@ async def _hip3_assets(client: HyperliquidClient, now_ms: int) -> tuple[list[Ass
         # Un DEX en échec pendant le balayage est gardé : mieux vaut une requête
         # de trop qu'un DEX actif oublié pendant une heure.
         db.kv_set(_HIP3_DEXS_KEY, now_ms, {"dexs": dexs, "active": sorted(set(active) | set(failed))})
-    return assets, failed
+    return assets, failed, scanned
 
 
 def is_hip3(coin: str) -> bool:
@@ -160,7 +166,7 @@ async def _poll_with(client: HyperliquidClient) -> dict:
 
     now_ms = int(time.time() * 1000)
     crypto = _build_assets(universe, asset_ctxs, mids)
-    hip3, hip3_failed = await _hip3_assets(client, now_ms)
+    hip3, hip3_failed, hip3_scanned = await _hip3_assets(client, now_ms)
     assets = crypto + hip3
 
     # Persistance snapshots pour l'historique (alertes temporelles).
@@ -185,7 +191,10 @@ async def _poll_with(client: HyperliquidClient) -> dict:
         logger.exception("Erreur arbitrage de funding")
     arb = funding_arb.current_state(now_ms)
 
-    after_active, before_active, created = alert_engine.evaluate_all(assets, ctx, arb[1] if arb else None)
+    # DEX entièrement lus ce cycle : une alerte active sur un de leurs marchés
+    # absent de la collecte (retiré, ou HIP-3 devenu inactif) peut être close.
+    covered = {""} | set(hip3_scanned)
+    after_active, before_active, created = alert_engine.evaluate_all(assets, ctx, arb[1] if arb else None, covered)
     delta = after_active - before_active
     if delta != 0:
         logger.info("Alertes: %d actives (%+d ce cycle)", after_active, delta)

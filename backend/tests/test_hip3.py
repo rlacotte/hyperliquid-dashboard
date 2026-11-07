@@ -41,7 +41,7 @@ def kv(monkeypatch):
 
 def test_seuls_les_marches_hip3_actifs_sont_suivis(kv):
     hl = FakeHl(["xyz"], {"xyz": (["xyz:TSLA", "xyz:TINY"], [ctx(vlm="5000000"), ctx(vlm="1000")])})
-    assets, failed = asyncio.run(poller._hip3_assets(hl, 0))
+    assets, failed, _ = asyncio.run(poller._hip3_assets(hl, 0))
     assert [a.coin for a in assets] == ["xyz:TSLA"]
     assert failed == []
 
@@ -49,13 +49,13 @@ def test_seuls_les_marches_hip3_actifs_sont_suivis(kv):
 def test_l_open_interest_suffit_a_qualifier_un_marche(kv):
     # 3 000 contrats × 100 $ = 300 k$ d'OI, volume nul.
     hl = FakeHl(["xyz"], {"xyz": (["xyz:GOLD"], [ctx(oi="3000")])})
-    assets, _ = asyncio.run(poller._hip3_assets(hl, 0))
+    assets, _, _ = asyncio.run(poller._hip3_assets(hl, 0))
     assert [a.coin for a in assets] == ["xyz:GOLD"]
 
 
 def test_un_dex_en_echec_n_interrompt_pas_les_autres(kv):
     hl = FakeHl(["xyz", "km"], {"xyz": (["xyz:TSLA"], [ctx(vlm="5000000")])}, fail={"km"})
-    assets, failed = asyncio.run(poller._hip3_assets(hl, 0))
+    assets, failed, _ = asyncio.run(poller._hip3_assets(hl, 0))
     assert [a.coin for a in assets] == ["xyz:TSLA"]
     assert failed == ["km"]
 
@@ -91,7 +91,7 @@ def test_un_dex_en_echec_au_balayage_reste_surveille(kv):
 
 def test_desactivable(kv, monkeypatch):
     monkeypatch.setattr(config, "HIP3_ENABLED", False)
-    assert asyncio.run(poller._hip3_assets(FakeHl([], {}), 0)) == ([], [])
+    assert asyncio.run(poller._hip3_assets(FakeHl([], {}), 0)) == ([], [], [])
 
 
 # --- Track record ------------------------------------------------------------------
