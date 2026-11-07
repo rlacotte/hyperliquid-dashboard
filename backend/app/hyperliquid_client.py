@@ -88,6 +88,10 @@ class HyperliquidClient:
         asset_ctxs = data[1]
         return meta.get("universe", []), asset_ctxs
 
+    async def get_predicted_fundings(self) -> list:
+        """Funding prédit sur Hyperliquid, Binance et Bybit, pour chaque coin."""
+        return await self._post_info({"type": "predictedFundings"})
+
     async def get_perp_dexs(self) -> list[str]:
         """Noms des DEX HIP-3 (le premier élément, null, est le DEX principal)."""
         data = await self._post_info({"type": "perpDexs"})

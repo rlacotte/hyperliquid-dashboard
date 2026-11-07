@@ -28,6 +28,13 @@ export const api = {
     getJson<{ status: string; last_fetch_ms: number; assets_count: number; poll_interval_sec: number }>("/api/health"),
   globalMetrics: () => getJson<GlobalMetrics>("/api/global-metrics"),
   trackRecord: () => getJson<import("./signals").TrackRecord>("/api/track-record"),
+  fundingArb: () =>
+    getJson<{
+      ts: number | null;
+      stale: boolean;
+      track_min_apr?: number;
+      coins: Record<string, { short: string; long: string; spread_apr: number; since: number; max_apr: number; last: number }>;
+    }>("/api/funding-arb"),
   leaderboard: () =>
     getJson<{
       ts: number;

@@ -108,6 +108,17 @@ ALERT_COOLDOWN_SEC = int(os.getenv("ALERT_COOLDOWN_SEC", "1800"))
 HIP3_ENABLED = os.getenv("HIP3_ENABLED", "1") == "1"
 HIP3_MIN_ACTIVITY_USD = float(os.getenv("HIP3_MIN_ACTIVITY_USD", "250000"))
 
+# --- Arbitrage de funding (cf. funding_arb.py) ----------------------------------------
+# Écart annualisé à partir duquel on SUIT un écart dans le temps.
+ARB_TRACK_MIN_APR = float(os.getenv("ARB_TRACK_MIN_APR", "0.15"))
+# Alerte : écart au moins égal à ce seuil ET continu depuis ARB_MIN_DURATION_SEC.
+ARB_ALERT_APR = float(os.getenv("ARB_ALERT_APR", "0.30"))
+ARB_CRIT_APR = float(os.getenv("ARB_CRIT_APR", "0.60"))
+ARB_MIN_DURATION_SEC = int(os.getenv("ARB_MIN_DURATION_SEC", str(2 * 3600)))
+# Sans profondeur, l'écart n'est pas exploitable : OI Hyperliquid minimal.
+ARB_MIN_OI_USD = float(os.getenv("ARB_MIN_OI_USD", "1000000"))
+ARB_REFRESH_SEC = int(os.getenv("ARB_REFRESH_SEC", "300"))
+
 # --- Notifications sortantes --------------------------------------------------
 # Les alertes s'affichent dans l'UI, mais personne ne regarde un dashboard à
 # 3h du matin : les nouvelles alertes sont aussi poussées vers Telegram et/ou

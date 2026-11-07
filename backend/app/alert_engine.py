@@ -49,6 +49,9 @@ class _CycleWriter:
         self._resolves: list[tuple[str, str]] = []
         self._confluence_updates: list[tuple] = []
 
+    def active_keys(self):
+        return self._active.keys()
+
     def has_active(self, coin: str, criterion: Criterion) -> dict | None:
         return self._active.get((coin, criterion.value))
 
@@ -341,8 +344,46 @@ def evaluate_confluence(result: ConfluenceResult, w: _CycleWriter) -> None:
         )
 
 
+def evaluate_funding_arb(state: dict[str, dict], now_ms: int, w: _CycleWriter) -> None:
+    """Critère 6 : écart de funding Hyperliquid ↔ CEX large ET persistant.
+
+    La persistance est ce qui sépare une opportunité d'un artefact de période
+    de financement : on n'alerte qu'au-delà de ARB_MIN_DURATION_SEC d'écart
+    continu (même paire de plateformes). Résolution avec hystérésis, comme les
+    autres critères.
+    """
+    from .funding_arb import VENUE_LABEL
+
+    for coin, s in state.items():
+        duration_ms = now_ms - s["since"]
+        spread = s["spread_apr"]
+        if spread >= config.ARB_ALERT_APR and duration_ms >= config.ARB_MIN_DURATION_SEC * 1000:
+            severity = Severity.CRITICAL if spread >= config.ARB_CRIT_APR else Severity.WARNING
+            hours = duration_ms / 3600_000
+            message = (
+                f"{coin} écart de funding {spread * 100:.0f} %/an depuis {hours:.1f} h — "
+                f"short {VENUE_LABEL[s['short']]} / long {VENUE_LABEL[s['long']]}"
+            )
+            w.create(coin, Criterion.FUNDING_ARB, severity, message, {
+                "spread_apr": spread,
+                "short": s["short"],
+                "long": s["long"],
+                "since_ms": s["since"],
+                "max_apr": s["max_apr"],
+                "oi_usd": s.get("oi_usd"),
+            })
+        elif _resolved(spread, config.ARB_ALERT_APR):
+            w.resolve(coin, Criterion.FUNDING_ARB, "écart de funding résorbé")
+
+    # Écarts sortis du suivi (sous le seuil de suivi, ou paire inversée puis
+    # disparue) : leur alerte éventuelle est résolue.
+    for (coin, criterion) in list(w.active_keys()):
+        if criterion == Criterion.FUNDING_ARB.value and coin not in state:
+            w.resolve(coin, Criterion.FUNDING_ARB, "écart de funding sorti du suivi")
+
+
 def evaluate_all(
-    assets: list[AssetMarket], ctx: HistoryContext
+    assets: list[AssetMarket], ctx: HistoryContext, arb_state: dict[str, dict] | None = None
 ) -> tuple[int, int, list[tuple]]:
     """Évalue tous les critères.
 
@@ -376,6 +417,13 @@ def evaluate_all(
             evaluate_confluence(result, writer)
         except Exception:
             logger.exception("Erreur confluence pour %s", asset.coin)
+
+    # Étape 3 : arbitrage de funding (None = état périmé : on ne conclut rien).
+    if arb_state is not None:
+        try:
+            evaluate_funding_arb(arb_state, now_ms, writer)
+        except Exception:
+            logger.exception("Erreur évaluation arbitrage de funding")
 
     writer.flush()
 

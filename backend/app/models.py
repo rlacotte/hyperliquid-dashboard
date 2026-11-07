@@ -19,6 +19,7 @@ class Criterion(str, Enum):
     VOLUME = "volume"
     PRICE_CHANGE = "price_change"
     CONFLUENCE = "confluence"
+    FUNDING_ARB = "funding_arb"
 
 
 class AssetMarket(BaseModel):

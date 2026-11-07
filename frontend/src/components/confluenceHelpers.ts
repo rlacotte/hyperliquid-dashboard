@@ -7,6 +7,7 @@ export const CRITERION_LABELS_MAP: Record<Criterion, string> = {
   open_interest: "Open Interest",
   funding_rate: "Funding",
   confluence: "Confluence",
+  funding_arb: "Arbitrage funding",
 };
 
 export function fmtScore(v: number): string {

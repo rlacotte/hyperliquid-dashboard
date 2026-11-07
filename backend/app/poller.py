@@ -10,7 +10,7 @@ import asyncio
 import logging
 import time
 
-from . import alert_engine, cache, config, db, notifier
+from . import alert_engine, cache, config, db, funding_arb, notifier
 from .hyperliquid_client import HyperliquidClient, fresh_client
 from .models import AssetMarket
 
@@ -175,7 +175,17 @@ async def _poll_with(client: HyperliquidClient) -> dict:
 
     # Évaluation des alertes sur l'historique pré-chargé
     ctx = db.load_history_context(now_ms)
-    after_active, before_active, created = alert_engine.evaluate_all(assets, ctx)
+
+    # Arbitrage de funding : état rafraîchi au plus toutes les 5 min (une
+    # requête), puis évalué à chaque cycle avec les autres critères.
+    arb_info = None
+    try:
+        arb_info = await funding_arb.maybe_refresh(client, crypto, now_ms)
+    except Exception:
+        logger.exception("Erreur arbitrage de funding")
+    arb = funding_arb.current_state(now_ms)
+
+    after_active, before_active, created = alert_engine.evaluate_all(assets, ctx, arb[1] if arb else None)
     delta = after_active - before_active
     if delta != 0:
         logger.info("Alertes: %d actives (%+d ce cycle)", after_active, delta)
@@ -224,6 +234,7 @@ async def _poll_with(client: HyperliquidClient) -> dict:
         "assets": len(crypto),
         "hip3_assets": len(hip3),
         "hip3_failed": hip3_failed,
+        "funding_arb": arb_info,
         "alerts_active": after_active,
         "alerts_delta": delta,
         "alerts_created": len(created),

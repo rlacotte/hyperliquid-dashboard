@@ -25,7 +25,8 @@ export type Criterion =
   | "open_interest"
   | "volume"
   | "price_change"
-  | "confluence";
+  | "confluence"
+  | "funding_arb";
 export type Direction = "bullish" | "bearish" | "neutral";
 
 export interface Alert {

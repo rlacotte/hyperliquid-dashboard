@@ -1,5 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { hl, type Market } from "../hl/client";
+import { api } from "../api";
+import { usePolling } from "../hooks/usePolling";
 import { useHlPoll, useLiveMidsAll } from "../hl/hooks";
 import { useNow, fmtCountdown } from "../hooks/useNow";
 import {
@@ -20,6 +22,16 @@ import { AssetDetail } from "../components/AssetDetail";
 type Tab = "arb" | "extremes";
 
 const OI_FLOORS = [0, 1e6, 5e6, 25e6];
+/** Persistance à partir de laquelle un écart est considéré exploitable (et alerte). */
+const PERSISTENT_H = 2;
+
+function fmtDuration(ms: number): string {
+  const min = Math.floor(ms / 60_000);
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 48) return `${h} h ${String(min % 60).padStart(2, "0")}`;
+  return `${Math.floor(h / 24)} j`;
+}
 
 export function FundingPage() {
   const [tab, setTab] = useState<Tab>("arb");
@@ -65,12 +77,22 @@ function ArbTab({ onSelect }: { onSelect: (m: Market) => void }) {
   // est calculé localement à partir de nextFundingTime.
   const predicted = useHlPoll(() => hl.predictedFundings(), 60_000);
   const perps = useHlPoll(() => hl.perps(""), 60_000);
+  // Durée des écarts : seule une mémoire côté serveur peut la donner (suivi
+  // toutes les 5 min, cf. backend/app/funding_arb.py).
+  const tracked = usePolling(() => api.fundingArb(), 60_000);
   const now = useNow(1000);
 
   const [feeMode, setFeeMode] = useState<FeeMode>("taker");
   const [requireHl, setRequireHl] = useState(true);
   const [minOi, setMinOi] = useState(1e6);
+  const [persistentOnly, setPersistentOnly] = useState(false);
   const [q, setQ] = useState("");
+
+  /** Depuis quand l'écart dure, si le suivi serveur voit LA MÊME paire. */
+  const sinceOf = (r: ArbRow): number | null => {
+    const t = tracked.data?.coins[r.coin];
+    return t && r.short && r.long && t.short === r.short.venue && t.long === r.long.venue ? t.since : null;
+  };
 
   const marketById = useMemo(() => new Map((perps.data ?? []).map((m) => [m.id, m])), [perps.data]);
 
@@ -81,8 +103,9 @@ function ArbTab({ onSelect }: { onSelect: (m: Market) => void }) {
       .filter((r) => r.short && r.long)
       .filter((r) => (marketById.get(r.coin)?.openInterestUsd ?? 0) >= minOi)
       .filter((r) => !query || r.coin.toUpperCase().includes(query))
+      .filter((r) => !persistentOnly || ((s) => s !== null && Date.now() - s >= PERSISTENT_H * 3600_000)(sinceOf(r)))
       .sort((a, b) => b.spreadApr - a.spreadApr);
-  }, [predicted.data, requireHl, minOi, q, marketById]);
+  }, [predicted.data, requireHl, minOi, q, marketById, persistentOnly, tracked.data]);
 
   if (predicted.error && !predicted.data) return <Centered className="text-red-400">Erreur : {predicted.error}</Centered>;
   if (!predicted.data) return <Centered>Chargement des taux prédits…</Centered>;
@@ -125,6 +148,11 @@ function ArbTab({ onSelect }: { onSelect: (m: Market) => void }) {
           <input type="checkbox" checked={!requireHl} onChange={(e) => setRequireHl(!e.target.checked)} className="accent-blue-500" />
           Inclure Binance ↔ Bybit
         </label>
+        <label className="flex cursor-pointer items-center gap-1.5 text-gray-400">
+          <input type="checkbox" checked={persistentOnly} onChange={(e) => setPersistentOnly(e.target.checked)} className="accent-blue-500" />
+          Persistants (≥ {PERSISTENT_H} h)
+          <InfoTip text="Un écart apparu il y a quelques minutes est souvent un artefact de période de financement. Un écart qui tient depuis plusieurs heures avec la même paire de plateformes est une vraie opportunité — c'est aussi la condition des alertes d'arbitrage." />
+        </label>
         <span className="text-gray-600">{rows.length} opportunités</span>
         <input
           value={q}
@@ -151,6 +179,9 @@ function ArbTab({ onSelect }: { onSelect: (m: Market) => void }) {
               <Th help="Jours de portage pour que le funding encaissé couvre les frais d'aller-retour, à écart constant.">
                 Rentable en
               </Th>
+              <Th help="Depuis quand l'écart dépasse 15 %/an avec cette même paire de plateformes, sans interruption (suivi serveur toutes les 5 min).">
+                Depuis
+              </Th>
               <Th help="Open interest du marché sur Hyperliquid.">OI HL</Th>
               <Th align="right" help="Hyperliquid règle le funding toutes les heures." last>
                 Prochain HL
@@ -159,11 +190,11 @@ function ArbTab({ onSelect }: { onSelect: (m: Market) => void }) {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <ArbLine key={r.coin} row={r} feeMode={feeMode} now={now} market={marketById.get(r.coin)} onSelect={onSelect} />
+              <ArbLine key={r.coin} row={r} feeMode={feeMode} now={now} since={sinceOf(r)} market={marketById.get(r.coin)} onSelect={onSelect} />
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-10 text-center text-gray-500">
+                <td colSpan={10} className="py-10 text-center text-gray-500">
                   Aucune opportunité avec ces filtres.
                 </td>
               </tr>
@@ -179,12 +210,14 @@ function ArbLine({
   row,
   feeMode,
   now,
+  since,
   market,
   onSelect,
 }: {
   row: ArbRow;
   feeMode: FeeMode;
   now: number;
+  since: number | null;
   market: Market | undefined;
   onSelect: (m: Market) => void;
 }) {
@@ -237,6 +270,13 @@ function ArbLine({
       <td className="px-3 py-1.5 text-right font-semibold tabular-nums text-white">{fmtApr(row.spreadApr)}</td>
       <td className={`px-3 py-1.5 text-right tabular-nums ${be !== null && be <= 3 ? "text-green-400" : be !== null && be <= 14 ? "text-gray-300" : "text-gray-500"}`}>
         {be === null ? "—" : be < 1 ? "< 1 j" : `${be.toFixed(1)} j`}
+      </td>
+      <td
+        className={`whitespace-nowrap px-3 py-1.5 text-right tabular-nums ${
+          since !== null && now - since >= PERSISTENT_H * 3600_000 ? "font-semibold text-amber-300" : "text-gray-500"
+        }`}
+      >
+        {since === null ? "—" : fmtDuration(now - since)}
       </td>
       <td className="px-3 py-1.5 text-right tabular-nums text-gray-400">
         {market?.openInterestUsd ? fmtUsd(market.openInterestUsd) : "—"}

@@ -51,6 +51,7 @@ const CRITERION_LABELS: Record<Criterion, string> = {
   volume: "Volume",
   price_change: "Prix",
   confluence: "Confluence",
+  funding_arb: "Arbitrage funding",
 };
 
 const CRITERION_FILTERS: { value: Criterion | "all"; label: string }[] = [
@@ -60,6 +61,7 @@ const CRITERION_FILTERS: { value: Criterion | "all"; label: string }[] = [
   { value: "open_interest", label: "OI" },
   { value: "volume", label: "Volume" },
   { value: "price_change", label: "Prix" },
+  { value: "funding_arb", label: "Arbitrage" },
 ];
 
 // Style directionnel pour les alertes confluence (surcharge la sévérité)

@@ -85,6 +85,7 @@ const LABELS: Record<string, string> = {
   "confluence|1": "Confluence haussière",
   "confluence|-1": "Confluence baissière",
   "confluence|0": "Confluence neutre",
+  "funding_arb|0": "Arbitrage de funding persistant",
 };
 
 export const signalLabel = (criterion: string, sign: number): string => LABELS[`${criterion}|${sign}`] ?? `${criterion} (${sign})`;
