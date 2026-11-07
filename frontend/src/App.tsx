@@ -13,6 +13,7 @@ import { TapePage } from "./pages/TapePage";
 import { SmartMoneyPage } from "./pages/SmartMoneyPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { SignalsPage } from "./pages/SignalsPage";
+import { PredictionsPage } from "./pages/PredictionsPage";
 import { WalletWatcher } from "./components/WalletWatcher";
 
 const NAV: NavItem[] = [
@@ -21,6 +22,7 @@ const NAV: NavItem[] = [
   { page: "smart-money", label: "Smart money" },
   { page: "signals", label: "Signaux" },
   { page: "funding", label: "Funding" },
+  { page: "predictions", label: "Prédictions" },
   { page: "wallet", label: "Wallet" },
 ];
 
@@ -62,6 +64,8 @@ export default function App() {
           <SmartMoneyPage />
         ) : route.page === "signals" ? (
           <SignalsPage />
+        ) : route.page === "predictions" ? (
+          <PredictionsPage />
         ) : (
           // Les sections inconnues retombent sur les marchés : un lien partagé
           // ne doit jamais afficher une page vide.
