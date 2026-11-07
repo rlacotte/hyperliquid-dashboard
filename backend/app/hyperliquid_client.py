@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import ssl
 from typing import Any
 
+import certifi
 import httpx
 
 from . import config
@@ -68,18 +70,28 @@ class HyperliquidClient:
         return resp.json()
 
     # --- Données agrégées ----------------------------------------------------
-    async def get_meta_and_asset_ctxs(self) -> tuple[list[dict], list[dict]]:
-        """Retourne (universe[], assetCtxs[]) pour tous les perps en un appel.
+    async def get_meta_and_asset_ctxs(self, dex: str = "") -> tuple[list[dict], list[dict]]:
+        """Retourne (universe[], assetCtxs[]) pour tous les perps d'un DEX en un appel.
 
+        `dex` vide = DEX principal ; sinon un DEX HIP-3 (ex. "xyz"), dont les
+        noms de marchés sont préfixés ("xyz:TSLA").
         universe[i] contient name, szDecimals, maxLeverage...
         assetCtxs[i] contient funding, openInterest, dayNtlVlm, markPx, prevDayPx...
         Alignement positionnel : universe[i] <-> assetCtxs[i].
         """
-        data = await self._post_info({"type": "metaAndAssetCtxs"})
+        body: dict[str, Any] = {"type": "metaAndAssetCtxs"}
+        if dex:
+            body["dex"] = dex
+        data = await self._post_info(body)
         # La réponse est [meta, assetCtxs] où meta = {universe, ...}
         meta = data[0]
         asset_ctxs = data[1]
         return meta.get("universe", []), asset_ctxs
+
+    async def get_perp_dexs(self) -> list[str]:
+        """Noms des DEX HIP-3 (le premier élément, null, est le DEX principal)."""
+        data = await self._post_info({"type": "perpDexs"})
+        return [d["name"] for d in data if isinstance(d, dict) and d.get("name")]
 
     async def get_all_mids(self) -> dict[str, str]:
         """Mid prices pour tous les actifs. Clés perp = 'BTC', spot = '@PURPLE'."""
@@ -113,10 +125,25 @@ class HyperliquidClient:
         return await self._post_info({"type": "l2Book", "coin": coin})
 
 
+# Contexte TLS partagé : un client neuf par cycle rechargeait à chaque fois le
+# magasin de certificats (load_verify_locations + recherches d'import de
+# certifi) — visible au profilage. Le contexte est immuable une fois créé et se
+# partage sans risque ; seules les connexions restent propres à chaque cycle.
+_SSL_CONTEXT: ssl.SSLContext | None = None
+
+
+def _ssl_context() -> ssl.SSLContext:
+    global _SSL_CONTEXT
+    if _SSL_CONTEXT is None:
+        _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+    return _SSL_CONTEXT
+
+
 def _new_http_client() -> httpx.AsyncClient:
     return httpx.AsyncClient(
         base_url=config.HYPERLIQUID_API_URL,
         timeout=_TIMEOUT,
+        verify=_ssl_context(),
         headers={"Content-Type": "application/json"},
         limits=httpx.Limits(keepalive_expiry=_KEEPALIVE_EXPIRY_SEC),
     )

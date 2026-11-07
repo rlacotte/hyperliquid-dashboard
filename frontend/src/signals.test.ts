@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alertSign, binomialZ, MIN_CLUSTERS, signalLabel, twoProportionZ, verdict } from "./signals";
+import { alertSign, binomialZ, findGroup, MIN_CLUSTERS, segmentOf, signalLabel, twoProportionZ, verdict, type TrackRecord } from "./signals";
 
 describe("sens d'une alerte (miroir du backend)", () => {
   it("prix et OI : signe de la variation", () => {
@@ -95,5 +95,32 @@ describe("libellés", () => {
   it("un libellé lisible par type et sens", () => {
     expect(signalLabel("funding_rate", 1)).toContain("longs paient");
     expect(signalLabel("volume", 0)).toBe("Pic de volume anormal");
+  });
+});
+
+describe("HIP-3", () => {
+  it("segment déduit du préfixe de DEX", () => {
+    expect(segmentOf("xyz:TSLA")).toBe("hip3");
+    expect(segmentOf("ETH")).toBe("crypto");
+  });
+
+  it("une alerte HIP-3 trouve le groupe HIP-3, pas le groupe crypto homonyme", () => {
+    const g = (segment: "crypto" | "hip3", alerts: number) => ({ segment, criterion: "funding_rate" as const, sign: 1 as const, alerts, coins: 5, horizons: {} as never });
+    const track: TrackRecord = { groups: [g("crypto", 100), g("hip3", 7)], outcomes: 107, horizons_h: [1, 4, 24], lookback_days: 200 };
+    expect(findGroup(track, "funding_rate", 1, "hip3")?.alerts).toBe(7);
+    expect(findGroup(track, "funding_rate", 1)?.alerts).toBe(100);
+  });
+
+  it("une réponse antérieure (sans segment) est traitée comme crypto", () => {
+    const track = { groups: [{ criterion: "volume", sign: 0, alerts: 3, coins: 3, horizons: {} }], outcomes: 3, horizons_h: [], lookback_days: 1 } as unknown as TrackRecord;
+    expect(findGroup(track, "volume", 0, "crypto")?.alerts).toBe(3);
+    expect(findGroup(track, "volume", 0, "hip3")).toBeUndefined();
+  });
+
+  it("sans référence, le verdict parle de hausse et non du BTC", () => {
+    const h = { n: 400, n_vs_btc: 400, p_beat_btc: 0.6, mean_vs_btc: 0.01, n_clusters: 120, p_beat_btc_clusters: 0.6, mean_vs_btc_clusters: 0.01, baseline_n: 900, baseline_p_beat: 0.45 };
+    const v = verdict(h, 10, null);
+    expect(v.text).toContain("montent");
+    expect(v.text).not.toContain("BTC");
   });
 });

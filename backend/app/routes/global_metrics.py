@@ -26,7 +26,11 @@ async def get_global_metrics():
         raise HTTPException(status_code=503, detail="Données marché pas encore disponibles")
 
     client = get_client()
-    metrics = await global_metrics.collect_all(assets, client._client)
+    # Le snapshot inclut les marchés HIP-3 ; les agrégats restent ceux du DEX
+    # principal (cf. poller : OI totale ou funding moyen mêlant actions et
+    # cryptos perdraient leur sens).
+    crypto = [a for a in assets if ":" not in a.coin]
+    metrics = await global_metrics.collect_all(crypto, client._client)
 
     # Deltas vs valeurs précédentes (pour afficher la variation).
     # Attention : les métriques CoinGecko sont imbriquées sous metrics["coingecko"],

@@ -79,8 +79,8 @@ export function SignalsPage() {
                 <Th help="Part des cas où le prix a monté sur l'horizon.">Hausse</Th>
                 <Th>Moyen</Th>
                 <Th help="Plus robuste que la moyenne aux mouvements extrêmes.">Médian</Th>
-                <Th help="Rendement du coin moins celui du BTC sur la même fenêtre : ce que le signal apporte au-delà du marché.">vs BTC</Th>
-                <Th help="Part des cas où le coin a fait mieux que le BTC.">Bat le BTC</Th>
+                <Th help="Crypto : rendement du coin moins celui du BTC sur la même fenêtre. HIP-3 : rendement brut (pas de référence commune à des actions, de l'or et des devises).">vs réf.</Th>
+                <Th help="Crypto : part des cas où le coin a fait mieux que le BTC. HIP-3 : part des cas en hausse.">Bat la réf.</Th>
                 <Th help="Épisodes indépendants : alertes regroupées par coin et par jour. C'est l'effectif réel du test.">Épisodes</Th>
                 <Th help="Horizon 24 h : part des jours ORDINAIRES où ces mêmes coins ont battu le BTC sur la même période. C'est la référence du verdict.">
                   Témoin
@@ -92,7 +92,7 @@ export function SignalsPage() {
             </thead>
             <tbody>
               {groups.map((g) => (
-                <GroupRow key={`${g.criterion}|${g.sign}`} g={g} h={h} />
+                <GroupRow key={`${g.segment ?? "crypto"}|${g.criterion}|${g.sign}`} g={g} h={h} />
               ))}
             </tbody>
           </table>
@@ -104,15 +104,25 @@ export function SignalsPage() {
 
 function GroupRow({ g, h }: { g: TrackGroup; h: HorizonKey }) {
   const s = g.horizons[h] ?? { n: 0 };
-  const v = verdict(s, g.coins);
+  const v = verdict(s, g.coins, g.benchmark === undefined ? "BTC" : g.benchmark);
   const tone =
     v.tone === "positive" ? "text-green-400" : v.tone === "negative" ? "text-red-400" : v.tone === "neutral" ? "text-gray-300" : "text-gray-600";
   return (
     <tr className="border-t border-bg-border">
       <td className="px-3 py-2">
-        <div className="font-medium text-gray-100">{signalLabel(g.criterion, g.sign)}</div>
+        <div className="font-medium text-gray-100">
+          {signalLabel(g.criterion, g.sign)}
+          {g.segment === "hip3" && (
+            <span
+              className="ml-1.5 rounded bg-purple-500/15 px-1 py-px align-middle text-[10px] font-medium text-purple-300"
+              title="Actions, indices, matières premières, devises : mesuré en rendement brut, sans référence commune."
+            >
+              HIP-3
+            </span>
+          )}
+        </div>
         <div className="text-[11px] text-gray-600">
-          {g.alerts} alertes · {g.coins} coins
+          {g.alerts} alertes · {g.coins} {g.segment === "hip3" ? "marchés" : "coins"}
         </div>
       </td>
       <td className="px-3 py-2 text-right tabular-nums text-gray-300">{s.n || "—"}</td>

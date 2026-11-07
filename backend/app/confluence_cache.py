@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import asdict
 
 from . import db
 from .confluence import ConfluenceResult, SignalScore
@@ -26,13 +25,35 @@ _local_fetched_at: float = 0.0
 
 
 def to_dict(result: ConfluenceResult) -> dict:
-    d = asdict(result)
-    # Les enum Criterion doivent être sérialisés en string
-    d["breakdown"] = [
-        {**b, "criterion": b["criterion"].value if hasattr(b["criterion"], "value") else b["criterion"]}
-        for b in d["breakdown"]
-    ]
-    return d
+    """Conversion explicite, champ par champ.
+
+    `dataclasses.asdict` parcourt récursivement avec copies profondes : mesuré à
+    ~58 ms par cycle pour ~370 marchés (crypto + HIP-3), soit plus que tout le
+    reste du calcul — sur un quota de CPU Vercel plafonné. Les champs sont
+    plats, une construction directe suffit.
+    """
+    return {
+        "coin": result.coin,
+        "score": result.score,
+        "direction": result.direction,
+        "active_count": result.active_count,
+        "regime": result.regime,
+        "regime_label": result.regime_label,
+        "confidence": result.confidence,
+        "volume_confirmed": result.volume_confirmed,
+        "breakdown": [
+            {
+                # Les enum Criterion doivent être sérialisés en string
+                "criterion": b.criterion.value if hasattr(b.criterion, "value") else b.criterion,
+                "score": b.score,
+                "direction": b.direction,
+                "value": b.value,
+                "active": b.active,
+                "label": b.label,
+            }
+            for b in result.breakdown
+        ],
+    }
 
 
 def _from_dict(d: dict) -> ConfluenceResult:

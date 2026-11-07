@@ -12,6 +12,12 @@ from ..models import AssetMarket, Candle, FundingPoint, MarketsResponse
 router = APIRouter(prefix="/api", tags=["markets"])
 
 
+def _coin_id(coin: str) -> str:
+    """Les identifiants HIP-3 sont sensibles à la casse ("xyz:TSLA") : mettre en
+    majuscules cassait ces marchés. Seuls les coins du DEX principal sont normalisés."""
+    return coin if ":" in coin else coin.upper()
+
+
 @router.get("/markets", response_model=MarketsResponse)
 async def get_markets() -> MarketsResponse:
     """Retourne le dernier snapshot marché mis en cache par le poller."""
@@ -30,7 +36,7 @@ async def get_candles(
     client = get_client()
     end_ms = int(time.time() * 1000)
     start_ms = end_ms - hours * 3600 * 1000
-    raw = await client.get_candles(coin.upper(), interval, start_ms, end_ms)
+    raw = await client.get_candles(_coin_id(coin), interval, start_ms, end_ms)
     candles = []
     for c in raw:
         candles.append(
@@ -51,7 +57,7 @@ async def get_funding(coin: str, hours: int = Query(72, ge=1, le=720)) -> list[F
     client = get_client()
     end_ms = int(time.time() * 1000)
     start_ms = end_ms - hours * 3600 * 1000
-    raw = await client.get_funding_history(coin.upper(), start_ms, end_ms)
+    raw = await client.get_funding_history(_coin_id(coin), start_ms, end_ms)
     return [FundingPoint(time=e["time"], funding=float(e.get("fundingRate", e.get("funding", 0)))) for e in raw]
 
 

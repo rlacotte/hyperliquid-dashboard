@@ -97,7 +97,8 @@ const COLS: Col[] = [
     label: "Régime",
     align: "right",
     help: "Score de confluence (−10 à +10) issu du croisement prix × open interest, amplifié par le volume et pondéré par le funding. 0 = aucun régime identifiable.",
-    kinds: ["perp"],
+    // HIP-3 compris : le moteur de régimes tourne aussi sur ces marchés.
+    kinds: ["perp", "hip3"],
     sortValue: (m, c) => Math.abs(c.score(m)?.score ?? 0),
     render: (m, c) => {
       const s = c.score(m);
@@ -176,7 +177,7 @@ export function MarketsTable({ markets, mids, confluence, oiCaps, selectedId, on
         const px = mids[m.id] ?? m.markPx;
         return m.prevDayPx > 0 ? (px - m.prevDayPx) / m.prevDayPx : 0;
       },
-      score: (m) => (m.kind === "perp" ? confluence.get(m.id) : undefined),
+      score: (m) => (m.kind === "spot" ? undefined : confluence.get(m.id)),
       atCap: (m) => oiCaps.has(m.id),
     }),
     [mids, confluence, oiCaps]

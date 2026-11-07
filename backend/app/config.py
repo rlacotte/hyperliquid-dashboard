@@ -100,6 +100,14 @@ ALERT_RESOLVE_RATIO = float(os.getenv("ALERT_RESOLVE_RATIO", "0.7"))
 # du même type sur le même coin pendant ce délai — sauf passage en critique.
 ALERT_COOLDOWN_SEC = int(os.getenv("ALERT_COOLDOWN_SEC", "1800"))
 
+# --- Marchés HIP-3 ---------------------------------------------------------------
+# Les DEX HIP-3 (actions, indices, matières premières, devises) entrent dans la
+# collecte et le moteur d'alertes. Seuil d'activité : sous ce volume quotidien
+# ET cet open interest, un marché est ignoré — carnet trop mince pour qu'une
+# alerte ait un sens, et chaque marché suivi coûte du CPU Vercel (plafond Hobby).
+HIP3_ENABLED = os.getenv("HIP3_ENABLED", "1") == "1"
+HIP3_MIN_ACTIVITY_USD = float(os.getenv("HIP3_MIN_ACTIVITY_USD", "250000"))
+
 # --- Notifications sortantes --------------------------------------------------
 # Les alertes s'affichent dans l'UI, mais personne ne regarde un dashboard à
 # 3h du matin : les nouvelles alertes sont aussi poussées vers Telegram et/ou

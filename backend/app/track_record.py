@@ -51,6 +51,23 @@ COINS_PER_PASS = 3
 PASS_EVERY_SEC = 120
 LOOKBACK_DAYS = 200  # bougies d'1 h : ~208 jours disponibles
 MARKET = "BTC"
+
+
+def segment_of(coin: str) -> str:
+    """crypto (DEX principal) ou hip3 (actions, indices, matières premières…).
+
+    Référence de comparaison : le BTC pour les cryptos. Pour le HIP-3, aucune
+    référence commune ne convient à la fois à TSLA, à l'or et à l'EUR : la
+    mesure est en rendement BRUT, et c'est le témoin (jours ordinaires des
+    mêmes marchés) qui dit si une alerte change quelque chose.
+    """
+    return "hip3" if ":" in coin else "crypto"
+
+
+def _bench(market: list[tuple[int, float]] | None, t_ms: int, cms: int) -> float | None:
+    """Prix de la référence ; sans référence (HIP-3), une constante : le
+    rendement « relatif » devient alors le rendement brut."""
+    return 1.0 if market is None else open_after(market, t_ms, cms)
 _PASS_KEY = "track_record_pass"
 
 
@@ -96,12 +113,13 @@ def open_after(candles: list[tuple[int, float]], t_ms: int, candle_ms: int = CAN
     return px if px > 0 else None
 
 
-def outcome(candles: list[tuple[int, float]], market: list[tuple[int, float]], ts: int, res: dict = FINE) -> dict:
-    """Rendements du coin et du marché aux horizons mesurables à cette résolution."""
+def outcome(candles: list[tuple[int, float]], market: list[tuple[int, float]] | None, ts: int, res: dict = FINE) -> dict:
+    """Rendements du coin et de la référence aux horizons mesurables à cette
+    résolution. `market=None` : pas de référence (HIP-3), rendement brut."""
     cms = res["ms"]
     out: dict[str, Any] = {"px0": None, "resolution_min": cms // 60_000}
     p0 = open_after(candles, ts, cms)
-    m0 = open_after(market, ts, cms)
+    m0 = _bench(market, ts, cms)
     out["px0"] = p0
     for h in HORIZONS_H:
         if h not in res["horizons"]:
@@ -109,7 +127,7 @@ def outcome(candles: list[tuple[int, float]], market: list[tuple[int, float]], t
             continue
         t = ts + h * 3600_000
         ph = open_after(candles, t, cms) if p0 else None
-        mh = open_after(market, t, cms) if m0 else None
+        mh = _bench(market, t, cms) if m0 else None
         out[f"ret_{h}h"] = (ph / p0 - 1) if (p0 and ph) else None
         out[f"btc_{h}h"] = (mh / m0 - 1) if (m0 and mh) else None
     out["complete"] = out[f"ret_{max(HORIZONS_H)}h"] is not None
@@ -119,7 +137,7 @@ def outcome(candles: list[tuple[int, float]], market: list[tuple[int, float]], t
 DAY_MS = 86400_000
 
 
-def baseline_from_candles(coin: str, candles: list[tuple[int, float]], market: list[tuple[int, float]], res: dict) -> list[tuple[str, int, float]]:
+def baseline_from_candles(coin: str, candles: list[tuple[int, float]], market: list[tuple[int, float]] | None, res: dict) -> list[tuple[str, int, float]]:
     """Rendement à 24 h relatif au BTC pour chaque jour (00:00 UTC) couvert.
 
     C'est le TÉMOIN : sur la période, ces coins battent-ils le BTC d'habitude ?
@@ -127,7 +145,7 @@ def baseline_from_candles(coin: str, candles: list[tuple[int, float]], market: l
     générale des altcoins (constaté : presque tous les types d'alertes
     « sous-performaient » le BTC, à la hausse comme à la baisse).
     """
-    if coin == MARKET or not candles or not market:
+    if not candles or (market is not None and (coin == MARKET or not market)):
         return []
     cms = res["ms"]
     first = (candles[0][0] // DAY_MS + 1) * DAY_MS
@@ -136,7 +154,7 @@ def baseline_from_candles(coin: str, candles: list[tuple[int, float]], market: l
     t = first
     while t <= last:
         p0, p1 = open_after(candles, t, cms), open_after(candles, t + DAY_MS, cms)
-        m0, m1 = open_after(market, t, cms), open_after(market, t + DAY_MS, cms)
+        m0, m1 = _bench(market, t, cms), _bench(market, t + DAY_MS, cms)
         if p0 and p1 and m0 and m1:
             out.append((coin, t // DAY_MS, (p1 / p0 - 1) - (m1 / m0 - 1)))
         t += DAY_MS
@@ -155,12 +173,12 @@ def aggregate(rows: list[dict], baseline: list[dict] | None = None) -> list[dict
     le BTC. On n'impose pas de thèse (« un funding positif est baissier ») : on
     montre ce qui s'est passé, à l'interface de le traduire en langage clair.
     """
-    groups: dict[tuple[str, int], list[dict]] = {}
+    groups: dict[tuple[str, int, str], list[dict]] = {}
     for r in rows:
-        groups.setdefault((r["criterion"], r["sign"]), []).append(r)
+        groups.setdefault((r["criterion"], r["sign"], segment_of(r["coin"])), []).append(r)
 
     out = []
-    for (criterion, sign), items in sorted(groups.items()):
+    for (criterion, sign, segment), items in sorted(groups.items()):
         horizons = {}
         for h in HORIZONS_H:
             rets = [r[f"ret_{h}h"] for r in items if r.get(f"ret_{h}h") is not None]
@@ -193,6 +211,10 @@ def aggregate(rows: list[dict], baseline: list[dict] | None = None) -> list[dict
         out.append({
             "criterion": criterion,
             "sign": sign,
+            "segment": segment,
+            # Ce à quoi se comparent les colonnes « vs » : le BTC, ou rien
+            # (rendement brut) pour le HIP-3.
+            "benchmark": MARKET if segment == "crypto" else None,
             "alerts": len(items),
             "coins": len({r["coin"] for r in items}),
             "horizons": horizons,
@@ -269,17 +291,21 @@ async def maybe_process(client, now_ms: int | None = None) -> dict | None:
         hi = min(max(p["ts"] for p in items) + TAIL_MS, now_ms)
         cur = ranges.get(interval)
         ranges[interval] = (min(lo, cur[0]), max(hi, cur[1])) if cur else (lo, hi)
-    market = {iv: await _candles(client, MARKET, iv, lo, hi) for iv, (lo, hi) in ranges.items()}
+    # Le BTC n'est téléchargé que pour les résolutions où le lot contient des
+    # cryptos : un lot 100 % HIP-3 n'a pas de référence.
+    crypto_intervals = {iv for (coin, iv) in groups if segment_of(coin) == "crypto"}
+    market = {iv: await _candles(client, MARKET, iv, *ranges[iv]) for iv in crypto_intervals}
 
     results = []
     baseline: list[tuple[str, int, float]] = []
     for (coin, interval), items in groups.items():
         res = res_by_interval[interval]
         lo, hi = ranges[interval]
+        bench = market[interval] if segment_of(coin) == "crypto" else None
         candles = market[interval] if coin == MARKET else await _candles(client, coin, interval, lo, hi)
         for p in items:
-            results.append({**p, **outcome(candles, market[interval], p["ts"], res)})
-        baseline.extend(baseline_from_candles(coin, candles, market[interval], res))
+            results.append({**p, **outcome(candles, bench, p["ts"], res)})
+        baseline.extend(baseline_from_candles(coin, candles, bench, res))
 
     db.upsert_alert_outcomes(results, now_ms)
     db.insert_baseline_days(baseline)
@@ -296,11 +322,13 @@ async def _backfill_baseline(client, now_ms: int) -> dict:
         return {"processed": 0}
     lo = min(c["lo"] for c in todo) - DAY_MS
     hi = min(max(c["hi"] for c in todo) + 2 * DAY_MS, now_ms)
-    market = await _candles(client, MARKET, COARSE["interval"], lo, hi)
+    needs_market = any(segment_of(c["coin"]) == "crypto" for c in todo)
+    market = await _candles(client, MARKET, COARSE["interval"], lo, hi) if needs_market else None
     rows: list[tuple[str, int, float]] = []
     for c in todo:
         candles = await _candles(client, c["coin"], COARSE["interval"], c["lo"] - DAY_MS, min(c["hi"] + 2 * DAY_MS, now_ms))
-        rows.extend(baseline_from_candles(c["coin"], candles, market, COARSE))
+        bench = market if segment_of(c["coin"]) == "crypto" else None
+        rows.extend(baseline_from_candles(c["coin"], candles, bench, COARSE))
     db.insert_baseline_days(rows)
     logger.info("Témoin : %d jours pour %s", len(rows), ",".join(c["coin"] for c in todo))
     return {"processed": 0, "baseline_days": len(rows), "coins": [c["coin"] for c in todo]}

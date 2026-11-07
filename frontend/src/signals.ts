@@ -37,7 +37,16 @@ export interface HorizonStats {
   baseline_mean?: number;
 }
 
+export type Segment = "crypto" | "hip3";
+
+/** Segment d'un coin : les ids HIP-3 sont préfixés par leur DEX ("xyz:TSLA"). */
+export const segmentOf = (coin: string): Segment => (coin.includes(":") ? "hip3" : "crypto");
+
 export interface TrackGroup {
+  /** Absent des réponses antérieures au HIP-3 : traité comme crypto. */
+  segment?: Segment;
+  /** Référence des colonnes « vs » : "BTC", ou null (rendement brut, HIP-3). */
+  benchmark?: string | null;
   criterion: Criterion;
   sign: -1 | 0 | 1;
   alerts: number;
@@ -80,8 +89,8 @@ const LABELS: Record<string, string> = {
 
 export const signalLabel = (criterion: string, sign: number): string => LABELS[`${criterion}|${sign}`] ?? `${criterion} (${sign})`;
 
-export function findGroup(track: TrackRecord | null | undefined, criterion: string, sign: number): TrackGroup | undefined {
-  return track?.groups.find((g) => g.criterion === criterion && g.sign === sign);
+export function findGroup(track: TrackRecord | null | undefined, criterion: string, sign: number, segment: Segment = "crypto"): TrackGroup | undefined {
+  return track?.groups.find((g) => g.criterion === criterion && g.sign === sign && (g.segment ?? "crypto") === segment);
 }
 
 /** En dessous, aucun verdict : la variance d'un petit échantillon domine tout. */
@@ -117,7 +126,14 @@ export interface Verdict {
  * sous-performé le BTC »), pas ce qu'il faudrait faire. Une même mesure se lit
  * différemment selon la stratégie (suivre ou prendre à contre-pied).
  */
-export function verdict(h: HorizonStats | undefined, coins: number): Verdict {
+/**
+ * `benchmark` : "BTC" pour les cryptos ; null pour le HIP-3, mesuré en
+ * rendement brut (aucune référence commune à des actions, de l'or et des
+ * devises) — « battre la référence » y signifie simplement « monter ».
+ */
+export function verdict(h: HorizonStats | undefined, coins: number, benchmark: string | null = "BTC"): Verdict {
+  const beat = benchmark ? `battent le ${benchmark}` : "montent";
+  const vs = benchmark ? `le ${benchmark}` : "la normale";
   const n = h?.n_clusters ?? 0;
   const p = h?.p_beat_btc_clusters;
   const mean = h?.mean_vs_btc_clusters;
@@ -136,7 +152,7 @@ export function verdict(h: HorizonStats | undefined, coins: number): Verdict {
   if (h.baseline_n && h.baseline_n >= MIN_SAMPLE && h.baseline_p_beat !== undefined) {
     const z = twoProportionZ(p, n, h.baseline_p_beat, h.baseline_n);
     const significant = Math.abs(z) >= 2;
-    const detail = `${share(p)} des épisodes battent le BTC, contre ${share(h.baseline_p_beat)} les jours ordinaires`;
+    const detail = `${share(p)} des épisodes ${beat}, contre ${share(h.baseline_p_beat)} les jours ordinaires`;
     if (!significant) return { tone: "neutral", text: `Comme d'habitude — ${detail}`, significant };
     return p > h.baseline_p_beat
       ? { tone: "positive", text: `Mieux que d'habitude — ${detail}`, significant }
@@ -146,9 +162,9 @@ export function verdict(h: HorizonStats | undefined, coins: number): Verdict {
   // Sans témoin (horizons 1 h, 4 h) : comparaison au BTC seul, signalée comme telle.
   const z = binomialZ(p, n);
   const significant = Math.abs(z) >= 2;
-  if (!significant) return { tone: "neutral", text: "Pas d'écart mesurable avec le BTC (sans témoin)", significant };
+  if (!significant) return { tone: "neutral", text: `Pas d'écart mesurable avec ${vs} (sans témoin)`, significant };
   const pct = `${mean >= 0 ? "+" : ""}${(mean * 100).toFixed(2)} %`;
   return p > 0.5
-    ? { tone: "positive", text: `Surperforme le BTC (${pct} par épisode, sans témoin)`, significant }
-    : { tone: "negative", text: `Sous-performe le BTC (${pct} par épisode, sans témoin)`, significant };
+    ? { tone: "positive", text: benchmark ? `Surperforme le ${benchmark} (${pct} par épisode, sans témoin)` : `Monte (${pct} par épisode, sans témoin)`, significant }
+    : { tone: "negative", text: benchmark ? `Sous-performe le ${benchmark} (${pct} par épisode, sans témoin)` : `Baisse (${pct} par épisode, sans témoin)`, significant };
 }

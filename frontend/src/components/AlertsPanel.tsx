@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Alert, Criterion, Severity } from "../types";
 import { directionArrow, directionLabel, fmtScore, fmtTime } from "../format";
-import { alertSign, findGroup, verdict, type TrackRecord } from "../signals";
+import { alertSign, findGroup, segmentOf, verdict, type TrackRecord } from "../signals";
 import { href } from "../router";
 
 interface Props {
@@ -24,9 +24,9 @@ const HINT_HORIZON = "24h" as const;
  */
 function TrackHint({ alert, track }: { alert: Alert; track: TrackRecord | null | undefined }) {
   if (!track) return null;
-  const g = findGroup(track, alert.criterion, alertSign(alert));
+  const g = findGroup(track, alert.criterion, alertSign(alert), segmentOf(alert.coin));
   const s = g?.horizons[HINT_HORIZON];
-  const v = verdict(s, g?.coins ?? 0);
+  const v = verdict(s, g?.coins ?? 0, g?.benchmark === undefined ? "BTC" : g.benchmark);
   const tone = v.tone === "positive" ? "text-green-400/90" : v.tone === "negative" ? "text-red-400/90" : "text-gray-500";
   return (
     <a href={href("signals")} className={`mt-1.5 block text-[11px] leading-snug hover:underline ${tone}`} title="Voir le track record complet">
@@ -182,7 +182,12 @@ export function AlertsPanel({ alerts, onAck, onAckAll, onSelectCoin, track }: Pr
                       onClick={() => onSelectCoin(alert.coin)}
                       className="font-semibold text-white hover:underline"
                     >
-                      {alert.coin}
+                      {alert.coin.includes(":") ? alert.coin.split(":")[1] : alert.coin}
+                      {alert.coin.includes(":") && (
+                        <span className="ml-1 rounded bg-purple-500/15 px-1 py-px align-middle text-[9px] font-medium uppercase text-purple-300">
+                          {alert.coin.split(":")[0]}
+                        </span>
+                      )}
                     </button>
                     <span className="rounded bg-bg-base px-1.5 py-0.5 text-[10px] text-gray-400">
                       {CRITERION_LABELS[alert.criterion]}

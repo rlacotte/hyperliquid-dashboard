@@ -89,6 +89,66 @@ async def poll_once() -> dict:
         return await _poll_with(client)
 
 
+_HIP3_DEXS_KEY = "hip3_dexs"
+_HIP3_DEXS_TTL_MS = 3600_000
+
+
+async def _hip3_plan(client: HyperliquidClient, now_ms: int) -> tuple[list[str], bool]:
+    """DEX à interroger ce cycle, et s'il s'agit d'un balayage complet.
+
+    Une fois par heure : tous les DEX (un nouveau peut apparaître, un ancien
+    s'activer). Entre-temps : seulement ceux qui avaient au moins un marché
+    actif — la majorité des DEX HIP-3 sont vides, et chacun coûtait une
+    requête, une analyse JSON et une poignée de main TLS par cycle.
+    """
+    stored = db.kv_get(_HIP3_DEXS_KEY)
+    if stored and now_ms - stored[0] < _HIP3_DEXS_TTL_MS and "active" in stored[1]:
+        return list(stored[1]["active"]), False
+    return await client.get_perp_dexs(), True
+
+
+async def _hip3_assets(client: HyperliquidClient, now_ms: int) -> tuple[list[AssetMarket], list[str]]:
+    """Marchés HIP-3 actifs, DEX interrogés en parallèle.
+
+    Un DEX en échec n'interrompt pas le cycle : le DEX principal reste la
+    donnée critique. Renvoie aussi la liste des DEX en échec, pour le compte
+    rendu du cycle.
+    """
+    if not config.HIP3_ENABLED:
+        return [], []
+    try:
+        dexs, full_scan = await _hip3_plan(client, now_ms)
+    except Exception:
+        logger.exception("Liste des DEX HIP-3 indisponible")
+        return [], ["*"]
+    results = await asyncio.gather(*(client.get_meta_and_asset_ctxs(d) for d in dexs), return_exceptions=True)
+    assets: list[AssetMarket] = []
+    failed: list[str] = []
+    active: list[str] = []
+    for dex, res in zip(dexs, results):
+        if isinstance(res, Exception):
+            failed.append(dex)
+            continue
+        universe, ctxs = res
+        # Pas de mids websocket pour HIP-3 côté serveur : le midPx du contexte suffit.
+        kept = [
+            a for a in _build_assets(universe, ctxs, {})
+            if max(a.day_ntl_vlm, a.open_interest_usd) >= config.HIP3_MIN_ACTIVITY_USD
+        ]
+        if kept:
+            active.append(dex)
+        assets.extend(kept)
+    if full_scan:
+        # Un DEX en échec pendant le balayage est gardé : mieux vaut une requête
+        # de trop qu'un DEX actif oublié pendant une heure.
+        db.kv_set(_HIP3_DEXS_KEY, now_ms, {"dexs": dexs, "active": sorted(set(active) | set(failed))})
+    return assets, failed
+
+
+def is_hip3(coin: str) -> bool:
+    return ":" in coin
+
+
 async def _poll_with(client: HyperliquidClient) -> dict:
     started = time.time()
     try:
@@ -99,7 +159,9 @@ async def _poll_with(client: HyperliquidClient) -> dict:
         raise
 
     now_ms = int(time.time() * 1000)
-    assets = _build_assets(universe, asset_ctxs, mids)
+    crypto = _build_assets(universe, asset_ctxs, mids)
+    hip3, hip3_failed = await _hip3_assets(client, now_ms)
+    assets = crypto + hip3
 
     # Persistance snapshots pour l'historique (alertes temporelles).
     # Écrit AVANT le chargement de l'historique pour que la fenêtre de volume
@@ -130,7 +192,9 @@ async def _poll_with(client: HyperliquidClient) -> dict:
     # Métriques globales (agrégats HL + sources externes cache-ées)
     try:
         from . import global_metrics
-        gm = await global_metrics.collect_all(assets, client._client)
+        # Agrégats du DEX principal uniquement : « OI totale », funding moyen ou
+        # advance/decline mélangeant cryptos et actions perdraient leur sens.
+        gm = await global_metrics.collect_all(crypto, client._client)
         global_metrics.persist_history(gm)
     except Exception:
         logger.exception("Erreur collecte métriques globales")
@@ -157,7 +221,9 @@ async def _poll_with(client: HyperliquidClient) -> dict:
 
     return {
         "ts": now_ms,
-        "assets": len(assets),
+        "assets": len(crypto),
+        "hip3_assets": len(hip3),
+        "hip3_failed": hip3_failed,
         "alerts_active": after_active,
         "alerts_delta": delta,
         "alerts_created": len(created),
