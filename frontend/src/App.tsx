@@ -13,6 +13,7 @@ import { TapePage } from "./pages/TapePage";
 import { SmartMoneyPage } from "./pages/SmartMoneyPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { SignalsPage } from "./pages/SignalsPage";
+import { WalletWatcher } from "./components/WalletWatcher";
 
 const NAV: NavItem[] = [
   { page: "markets", label: "Marchés" },
@@ -66,6 +67,11 @@ export default function App() {
           // ne doit jamais afficher une page vide.
           <MarketsPage />
         )}
+      </ErrorBoundary>
+
+      {/* Surveillance des wallets suivis : active sur toutes les pages. */}
+      <ErrorBoundary resetKey="watcher">
+        <WalletWatcher />
       </ErrorBoundary>
     </div>
   );

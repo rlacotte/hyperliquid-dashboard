@@ -31,7 +31,10 @@ export type Subscription =
   | { type: "l2Book"; coin: string }
   | { type: "bbo"; coin: string }
   | { type: "activeAssetCtx"; coin: string }
-  | { type: "candle"; coin: string; interval: string };
+  | { type: "candle"; coin: string; interval: string }
+  // Exécutions d'un compte. Public sur Hyperliquid (toute donnée est on-chain).
+  // Le premier message est un INSTANTANÉ des fills récents (isSnapshot: true).
+  | { type: "userFills"; user: string };
 
 export type WsStatus = "idle" | "connecting" | "open" | "reconnecting";
 
@@ -44,6 +47,9 @@ export function subscriptionKey(sub: Subscription): string {
       return `allMids|${sub.dex ?? ""}`;
     case "candle":
       return `candle|${sub.coin}|${sub.interval}`;
+    case "userFills":
+      // Adresses comparées en minuscules : Hyperliquid les renvoie ainsi.
+      return `userFills|${sub.user.toLowerCase()}`;
     default:
       return `${sub.type}|${sub.coin}`;
   }
@@ -58,6 +64,8 @@ export function messageKey(channel: string, data: any): string | null { // eslin
       return Array.isArray(data) && data.length > 0 ? `trades|${data[0].coin}` : null;
     case "candle":
       return data?.s ? `candle|${data.s}|${data.i}` : null;
+    case "userFills":
+      return typeof data?.user === "string" ? `userFills|${data.user.toLowerCase()}` : null;
     case "l2Book":
     case "bbo":
     case "activeAssetCtx":

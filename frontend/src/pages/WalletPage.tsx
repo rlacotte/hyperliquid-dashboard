@@ -5,14 +5,13 @@ import { navigate, href } from "../router";
 import {
   isAddress,
   liqRisk,
-  loadWatchlist,
   pnlBreakdown,
   positionView,
-  saveWatchlist,
   shortAddr,
   type PositionView,
-  type WatchedWallet,
 } from "../wallet";
+import { notifySettingsStore, useActivity, useNotifySettings, useWatchlist, watchlistStore } from "../stores";
+import { describe as describeAction } from "../walletActivity";
 import { colorPct, fmtAgo, fmtPct, fmtPrice, fmtUsd, fmtUsdSigned } from "../format";
 import { AreaChart } from "../components/AreaChart";
 import { InfoTip } from "../components/InfoTip";
@@ -21,18 +20,27 @@ import { LivePrice } from "../components/LivePrice";
 const WEEK_MS = 7 * 86400_000;
 
 export function WalletPage({ address }: { address?: string }) {
-  const [watch, setWatch] = useState<WatchedWallet[]>(loadWatchlist);
+  // Store partagé : la surveillance en direct (WalletWatcher, au niveau de
+  // l'app) suit les ajouts et retraits faits ici.
+  const watch = useWatchlist();
   const normalized = address?.trim().toLowerCase();
   const valid = normalized ? isAddress(normalized) : false;
 
   const toggleWatch = (addr: string) => {
-    setWatch((list) => {
-      const next = list.some((w) => w.address === addr)
+    const list = watchlistStore.get();
+    watchlistStore.set(
+      list.some((w) => w.address === addr)
         ? list.filter((w) => w.address !== addr)
-        : [...list, { address: addr, label: shortAddr(addr), addedAt: Date.now() }];
-      saveWatchlist(next);
-      return next;
-    });
+        : [...list, { address: addr, label: shortAddr(addr), addedAt: Date.now() }]
+    );
+  };
+
+  const rename = (addr: string) => {
+    const current = watchlistStore.get().find((w) => w.address === addr);
+    const label = window.prompt("Nom affiché dans les notifications :", current?.label ?? shortAddr(addr));
+    if (label === null) return;
+    const clean = label.trim().slice(0, 32) || shortAddr(addr);
+    watchlistStore.set(watchlistStore.get().map((w) => (w.address === addr ? { ...w, label: clean } : w)));
   };
 
   return (
@@ -59,6 +67,8 @@ export function WalletPage({ address }: { address?: string }) {
           </div>
         )}
       </div>
+
+      {watch.length > 0 && <ActivityPanel onRename={rename} />}
 
       {!address ? (
         <Intro />
@@ -547,5 +557,106 @@ function Th({ children, align = "right", help, last }: { children: ReactNode; al
       {children}
       {help && <InfoTip text={help} align={last ? "right" : "center"} />}
     </th>
+  );
+}
+
+
+// --- Activité en direct des wallets suivis --------------------------------------------
+const MIN_NOTIONALS = [0, 10_000, 25_000, 100_000, 500_000];
+
+function ActivityPanel({ onRename }: { onRename: (addr: string) => void }) {
+  const watch = useWatchlist();
+  const settings = useNotifySettings();
+  const activity = useActivity();
+  const labels = useMemo(() => new Map(watch.map((w) => [w.address, w.label])), [watch]);
+  const supported = typeof Notification !== "undefined";
+  const [permission, setPermission] = useState<NotificationPermission | "unsupported">(supported ? Notification.permission : "unsupported");
+
+  const enable = async () => {
+    if (!supported) return;
+    // La permission ne peut être demandée qu'en réponse à un geste utilisateur.
+    const p = await Notification.requestPermission();
+    setPermission(p);
+    notifySettingsStore.set({ ...settings, enabled: p === "granted" });
+  };
+
+  return (
+    <Panel>
+      <div className="mb-2 flex flex-wrap items-center gap-3">
+        <h3 className="flex items-center text-sm font-medium text-gray-300">
+          Activité en direct des wallets suivis
+          <InfoTip text="Ouvertures, renforcements, réductions, clôtures et liquidations des wallets que vous suivez, en temps réel. Les exécutions d'un même marché à quelques secondes d'intervalle sont regroupées en une action. Un onglet du dashboard doit rester ouvert : sans compte, aucun serveur ne peut vous prévenir hors ligne." />
+        </h3>
+        <div className="ml-auto flex flex-wrap items-center gap-2 text-xs">
+          <label className="flex items-center gap-1.5 text-gray-400">
+            Alerter dès
+            <select
+              value={settings.minNotional}
+              onChange={(e) => notifySettingsStore.set({ ...settings, minNotional: Number(e.target.value) })}
+              className="rounded border border-bg-border bg-bg-base px-1.5 py-0.5 text-gray-200"
+            >
+              {MIN_NOTIONALS.map((v) => (
+                <option key={v} value={v}>
+                  {v === 0 ? "toute action" : fmtUsd(v)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {permission === "unsupported" ? (
+            <span className="text-gray-600">Notifications non prises en charge par ce navigateur</span>
+          ) : permission === "denied" ? (
+            <span className="text-amber-400/80" title="À réautoriser dans les réglages du site du navigateur.">
+              Notifications bloquées par le navigateur
+            </span>
+          ) : settings.enabled && permission === "granted" ? (
+            <button
+              onClick={() => notifySettingsStore.set({ ...settings, enabled: false })}
+              className="rounded border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-green-300"
+            >
+              🔔 Notifications actives
+            </button>
+          ) : (
+            <button onClick={enable} className="rounded bg-blue-600 px-2 py-0.5 text-white hover:bg-blue-500">
+              Activer les notifications
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-2 flex flex-wrap gap-1.5 text-xs">
+        {watch.map((w) => (
+          <span key={w.address} className="inline-flex items-center gap-1 rounded-md border border-bg-border bg-bg-base px-2 py-0.5">
+            <a href={href("wallet", w.address)} className="text-gray-300 hover:text-white">
+              {w.label}
+            </a>
+            <button onClick={() => onRename(w.address)} className="text-gray-600 hover:text-gray-300" title="Renommer">
+              ✎
+            </button>
+          </span>
+        ))}
+      </div>
+
+      {activity.length === 0 ? (
+        <p className="text-xs text-gray-500">En écoute… les actions apparaîtront ici dès qu'un wallet suivi exécute un ordre.</p>
+      ) : (
+        <ul className="max-h-72 space-y-1 overflow-auto text-sm">
+          {activity.map((a) => {
+            const { title, body } = describeAction(a, labels.get(a.user) ?? shortAddr(a.user), fmtUsd);
+            const big = a.kind === "liquidation" || a.notional >= settings.minNotional;
+            return (
+              <li key={a.key} className={`flex items-baseline gap-2 ${big ? "" : "opacity-60"}`}>
+                <span className="w-16 shrink-0 text-xs tabular-nums text-gray-500">
+                  {new Date(a.time).toLocaleTimeString("fr-FR", { hour12: false })}
+                </span>
+                <a href={href("wallet", a.user)} className={`hover:underline ${a.kind === "liquidation" ? "font-semibold text-red-300" : a.side === "long" ? "text-green-300" : "text-red-300"}`}>
+                  {title}
+                </a>
+                <span className="text-xs text-gray-500">{body}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Panel>
   );
 }
