@@ -5,6 +5,20 @@ import { resetTelegram, telegramStore, useNotifySettings, useTelegram, useWatchl
 /** Plafond serveur (TG_MAX_WALLETS_PER_SUB) : au-delà, les premiers seulement. */
 export const TELEGRAM_MAX_WALLETS = 25;
 
+/** Attente de « Démarrer » : vérification serrée au début, puis espacée, sans fin. */
+const FAST_POLL_MS = 3_000;
+const FAST_FOR_MS = 5 * 60_000;
+const SLOW_POLL_MS = 20_000;
+
+async function refreshLink(code: string) {
+  try {
+    const s = await api.telegram.status(code);
+    if (telegramStore.get().code === code) telegramStore.set({ ...telegramStore.get(), linked: s.linked });
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 404 || e.status === 401)) resetTelegram();
+  }
+}
+
 /**
  * Tient le serveur à jour de ce que ce navigateur suit, pour que le bot
  * Telegram surveille les mêmes wallets avec le même seuil.
@@ -21,14 +35,35 @@ export function useTelegramSync() {
   // Au chargement : l'état a pu changer côté Telegram (/stop, bot bloqué).
   useEffect(() => {
     const { code } = telegramStore.get();
-    if (!code) return;
-    api.telegram.status(code).then(
-      (s) => telegramStore.set({ ...telegramStore.get(), linked: s.linked }),
-      (e) => {
-        if (e instanceof ApiError && (e.status === 404 || e.status === 401)) resetTelegram();
-      }
-    );
+    if (code) refreshLink(code);
   }, []);
+
+  // En attente de « Démarrer ». Constaté : l'appui peut venir bien après
+  // (6 min et demie au premier essai réel) — une attente bornée laissait la
+  // conversation reliée côté serveur mais sans aucun wallet transmis. On
+  // vérifie donc sans limite de durée, et aussitôt qu'on revient sur l'onglet
+  // (retour depuis l'application Telegram).
+  useEffect(() => {
+    if (!tg.code || tg.linked) return;
+    const code = tg.code;
+    const started = Date.now();
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      refreshLink(code);
+      timer = setTimeout(tick, Date.now() - started < FAST_FOR_MS ? FAST_POLL_MS : SLOW_POLL_MS);
+    };
+    timer = setTimeout(tick, FAST_POLL_MS);
+    const onReturn = () => {
+      if (document.visibilityState === "visible") refreshLink(code);
+    };
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("focus", onReturn);
+      document.removeEventListener("visibilitychange", onReturn);
+    };
+  }, [tg.code, tg.linked]);
 
   const payload = JSON.stringify({
     wallets: watch.slice(0, TELEGRAM_MAX_WALLETS).map((w) => ({ address: w.address, label: w.label })),

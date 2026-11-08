@@ -1,11 +1,7 @@
 import { useEffect, useState } from "react";
-import { api, ApiError } from "../api";
+import { api } from "../api";
 import { resetTelegram, telegramStore, useNotifySettings, useTelegram, useWatchlist } from "../stores";
 import { TELEGRAM_MAX_WALLETS } from "../hooks/useTelegramSync";
-
-/** Attente de l'appui sur « Démarrer » dans Telegram. */
-const POLL_MS = 3_000;
-const WAIT_MAX_MS = 5 * 60_000;
 
 /**
  * Relie ce navigateur à une conversation Telegram, sans compte : le serveur
@@ -27,21 +23,8 @@ export function TelegramLink() {
     );
   }, []);
 
-  useEffect(() => {
-    if (!tg.code || tg.linked) return;
-    const code = tg.code;
-    const started = Date.now();
-    const id = setInterval(async () => {
-      if (Date.now() - started > WAIT_MAX_MS) return clearInterval(id);
-      try {
-        const s = await api.telegram.status(code);
-        if (s.linked) telegramStore.set({ ...telegramStore.get(), linked: true });
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 404) resetTelegram();
-      }
-    }, POLL_MS);
-    return () => clearInterval(id);
-  }, [tg.code, tg.linked]);
+  // L'attente de « Démarrer » est gérée par useTelegramSync, monté au niveau
+  // de l'application : elle continue quelle que soit la page.
 
   if (!bot) return null;
 
