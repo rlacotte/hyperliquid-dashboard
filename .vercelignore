@@ -7,3 +7,9 @@ frontend/dist
 .vscode
 .idea
 .DS_Store
+# Fichiers d'environnement locaux : jamais envoyés (la production a ses propres
+# variables ; un .env embarqué y activait le poller de développement).
+.env
+.env.*
+**/.env
+**/.env.*

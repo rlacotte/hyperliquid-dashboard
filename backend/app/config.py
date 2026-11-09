@@ -9,7 +9,15 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Sur Vercel (VERCEL=1), la configuration vient UNIQUEMENT des variables du
+# projet. Incident constaté : backend/.env, le fichier de développement local,
+# partait avec chaque déploiement et était chargé ici — son RUN_POLLER=1
+# lançait une boucle de collecte dans chaque instance, en plus du cron et sans
+# son verrou anti-doublon : deux cycles par minute, CPU doublé, et chaque
+# mouvement de wallet notifié deux fois sur Telegram.
+ON_VERCEL = bool(os.getenv("VERCEL"))
+if not ON_VERCEL:
+    load_dotenv()
 
 # --- API Hyperliquid ---------------------------------------------------------
 HYPERLIQUID_API_URL = os.getenv(
@@ -35,8 +43,10 @@ DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL") or ""
 CRON_SECRET = os.getenv("CRON_SECRET", "")
 
 # Poller in-process : utile en dev local (uvicorn --reload), inutile et
-# impossible en serverless où c'est le cron qui déclenche la collecte.
-RUN_POLLER = os.getenv("RUN_POLLER", "0") == "1"
+# nuisible en serverless où c'est le cron qui déclenche la collecte : une
+# instance gelée entre deux requêtes relance sa boucle à chaque réveil, en
+# même temps que le cycle du cron. Toujours coupé sur Vercel.
+RUN_POLLER = os.getenv("RUN_POLLER", "0") == "1" and not ON_VERCEL
 
 # Rétention des snapshots de marché (secondes)
 SNAPSHOT_RETENTION_SEC = int(os.getenv("SNAPSHOT_RETENTION_SEC", str(7 * 24 * 3600)))
