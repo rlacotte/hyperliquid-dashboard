@@ -83,6 +83,8 @@ export function revenueTrend(r: RevenueRow): number | null {
 
 export function fmtMultiple(m: number | null): string {
   if (m === null) return "—";
+  // Au-delà, le revenu est anecdotique : le chiffre exact n'a plus de sens.
+  if (m >= 10_000) return "> 10 000×";
   if (m >= 1000) return `${Math.round(m).toLocaleString("fr-FR")}×`;
   if (m >= 100) return `${Math.round(m)}×`;
   return `${m.toFixed(1)}×`;

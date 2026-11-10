@@ -63,6 +63,8 @@ describe("multiples", () => {
     expect(fmtMultiple(4.23)).toBe("4.2×");
     expect(fmtMultiple(154.1)).toBe("154×");
     expect(fmtMultiple(null)).toBe("—");
+    // MOVE : 1,52 $ de revenus sur 30 jours pour 27 M$ de capitalisation.
+    expect(fmtMultiple(1_463_971)).toBe("> 10 000×");
   });
 
   it("médiane", () => {

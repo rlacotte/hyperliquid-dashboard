@@ -169,7 +169,7 @@ export function RevenuePage() {
         </ul>
       </details>
 
-      <div className="no-scrollbar -mx-3 overflow-x-auto px-3 md:mx-0 md:px-0">
+      <div className="no-scrollbar -mx-3 shrink-0 overflow-x-auto px-3 md:mx-0 md:px-0">
         <div className="flex w-max gap-1 rounded-lg border border-bg-border bg-bg-panel p-0.5 text-sm">
           {(["all", ...TAB_ORDER.filter((t) => counts[t])] as (RevenueTab | "all")[]).map((t) => (
             <button
@@ -240,7 +240,7 @@ export function RevenuePage() {
       ) : !data.data ? (
         <p className="text-sm text-gray-500">Chargement…</p>
       ) : (
-        <div className="overflow-auto rounded-lg border border-bg-border md:min-h-0 md:flex-1">
+        <div className="shrink-0 overflow-auto rounded-lg border border-bg-border md:min-h-0 md:flex-1 md:shrink">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-bg-panel text-xs text-gray-400">
               <tr>
@@ -265,12 +265,17 @@ export function RevenuePage() {
                 <Th k="fdv" sort={sort} asc={asc} onSort={toggleSort} secondary help="Valorisation totalement diluée : offre maximale × prix.">
                   FDV
                 </Th>
-                <Th k="mcRev" sort={sort} asc={asc} onSort={toggleSort} help="Capitalisation / revenus annuels.">
+                <Th k="mcRev" sort={sort} asc={asc} onSort={toggleSort} help="Capitalisation / revenus annuels." secondary>
                   MC / rev.
                 </Th>
-                <Th k="fdvRev" sort={sort} asc={asc} onSort={toggleSort} help="FDV / revenus annuels." last>
+                <Th k="fdvRev" sort={sort} asc={asc} onSort={toggleSort} help="FDV / revenus annuels." last secondary>
                   FDV / rev.
                 </Th>
+                {/* Téléphone : les deux multiples dans une seule colonne. */}
+                <th className="px-2 py-2 text-right font-medium sm:hidden">
+                  MC · FDV
+                  <br />/ rev.
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -292,7 +297,7 @@ export function RevenuePage() {
                         )}
                       </div>
                       <div
-                        className="max-w-[9rem] truncate text-[11px] text-gray-500 sm:max-w-[14rem]"
+                        className="max-w-[8rem] truncate text-[11px] text-gray-500 sm:max-w-[14rem]"
                         title={v.row.sources.map((s) => `${s.name} (${s.kind === "chain" ? "chaîne" : s.category ?? "?"}) : ${fmtUsdLarge(s.rev_30d)} / 30 j`).join("\n")}
                       >
                         {v.row.sources.length > 1 ? v.row.sources.map((s) => s.name).join(" + ") : v.row.name}
@@ -306,14 +311,18 @@ export function RevenuePage() {
                     <Td className="font-semibold text-gray-100">{v.annual > 0 ? fmtUsdLarge(v.annual) : "—"}</Td>
                     <Td secondary>{v.mcap === null ? "—" : fmtUsdLarge(v.mcap)}</Td>
                     <Td secondary>{v.fdv === null ? "—" : fmtUsdLarge(v.fdv)}</Td>
-                    <Td className={`font-semibold ${multipleTone(v.mcRev)}`}>{fmtMultiple(v.mcRev)}</Td>
-                    <Td className={multipleTone(v.fdvRev)}>{fmtMultiple(v.fdvRev)}</Td>
+                    <Td secondary className={`font-semibold ${multipleTone(v.mcRev)}`}>{fmtMultiple(v.mcRev)}</Td>
+                    <Td secondary className={multipleTone(v.fdvRev)}>{fmtMultiple(v.fdvRev)}</Td>
+                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums sm:hidden">
+                      <div className={`font-semibold ${multipleTone(v.mcRev)}`}>{fmtMultiple(v.mcRev)}</div>
+                      <div className={`text-[11px] ${multipleTone(v.fdvRev)}`}>{fmtMultiple(v.fdvRev)}</div>
+                    </td>
                   </tr>
                 );
               })}
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-gray-500">
+                  <td colSpan={10} className="py-10 text-center text-gray-500">
                     Aucun token ne correspond.
                   </td>
                 </tr>
