@@ -150,3 +150,18 @@ def test_symboles_hyperliquid():
     assert revenue.hl_symbol("kBONK") == "BONK"
     assert revenue.hl_symbol("KAITO") == "KAITO"
     assert revenue.hl_symbol("HYPE") == "HYPE"
+
+
+def test_le_releve_force_exige_le_secret(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app import config, db
+
+    monkeypatch.setattr(db, "init_db", lambda: None)
+    monkeypatch.setattr(config, "RUN_POLLER", False)
+    monkeypatch.setattr(config, "CRON_SECRET", "s3cret")
+    from app.main import app
+
+    with TestClient(app) as c:
+        assert c.post("/api/revenue/refresh").status_code == 401
+        assert c.post("/api/revenue/refresh", headers={"Authorization": "Bearer faux"}).status_code == 401
