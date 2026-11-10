@@ -3,6 +3,8 @@
 Sources :
 - DefiLlama, vue « revenus » (dataType=dailyRevenue) : la part des frais que
   garde le protocole (trésorerie + détenteurs), par protocole et par chaîne ;
+- DefiLlama, vue « revenus aux détenteurs » (dataType=dailyHoldersRevenue) :
+  la part qui revient aux détenteurs du token (rachats, burns, distributions) ;
 - DefiLlama /config : rattache chaque protocole à son token (symbole, id
   CoinGecko, protocole parent) et dit quelles chaînes sont des L2 ;
 - CoinGecko /coins/markets : capitalisation (MC) et valorisation totalement
@@ -13,7 +15,7 @@ DEX principal, ou en spot quand le protocole tourne sur Hyperliquid (sinon un
 symbole spot générique risquerait de désigner un autre token). Deux protocoles
 partageant un symbole : on garde le token de plus grosse capitalisation.
 
-Coût : ~14 Mo de JSON toutes les 3 h, dans le cycle de collecte. Le résultat
+Coût : ~17 Mo de JSON toutes les 3 h, dans le cycle de collecte. Le résultat
 (~120 lignes) est gardé en kv et servi par /api/revenue.
 """
 from __future__ import annotations
@@ -39,6 +41,10 @@ RETRY_MS = 10 * 60_000
 LLAMA_REVENUE_URL = (
     "https://api.llama.fi/overview/fees"
     "?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyRevenue"
+)
+LLAMA_HOLDERS_URL = (
+    "https://api.llama.fi/overview/fees"
+    "?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyHoldersRevenue"
 )
 LLAMA_CONFIG_URL = "https://api.llama.fi/config"
 
@@ -93,8 +99,11 @@ def _num(v) -> float:
         return 0.0
 
 
-def build_groups(revenue_protocols: list[dict], cfg: dict) -> list[Group]:
-    """Agrège les entrées de revenus par chaîne, par parent ou par protocole."""
+def build_groups(revenue_protocols: list[dict], cfg: dict, keep_all: bool = False) -> list[Group]:
+    """Agrège les entrées de revenus par chaîne, par parent ou par protocole.
+
+    keep_all : garde aussi les groupes à zéro ou sans token — pour les revenus
+    aux détenteurs, « publié à 0 » et « non publié » ne disent pas la même chose."""
     protos = {str(p.get("id")): p for p in cfg.get("protocols", [])}
     parents = {p.get("id"): p for p in cfg.get("parentProtocols", [])}
     chains = cfg.get("chainCoingeckoIds", {})
@@ -138,6 +147,8 @@ def build_groups(revenue_protocols: list[dict], cfg: dict) -> list[Group]:
         if g.kind == "protocol" and g._cats:
             g.category = g._cats.most_common(1)[0][0]
             g.tab = tab_of(g.category)
+    if keep_all:
+        return list(groups.values())
     return [g for g in groups.values() if g.symbol and g.symbol != "-" and g.gecko_id and g.r30 > 0]
 
 
@@ -170,7 +181,25 @@ def _token_tab(groups: list[Group]) -> tuple[str, str | None]:
     return (protocols[0].tab, protocols[0].category) if protocols else ("other", None)
 
 
-def assemble(by_symbol: dict[str, list[Group]], markets: dict[str, dict], perp_symbols: set[str]) -> list[dict]:
+def _holders(same: list[Group], holders: dict[str, Group]) -> dict:
+    """Revenus aux détenteurs des mêmes entités ; None si DefiLlama n'en publie
+    pour aucune (inconnu, à ne pas confondre avec zéro)."""
+    found = [holders[g.key] for g in same if g.key in holders]
+    if not found:
+        return {"hold_30d": None, "hold_prev_30d": None, "hold_1y": None}
+    return {
+        "hold_30d": sum(h.r30 for h in found),
+        "hold_prev_30d": sum(h.r60 for h in found),
+        "hold_1y": sum(h.r1y for h in found),
+    }
+
+
+def assemble(
+    by_symbol: dict[str, list[Group]],
+    markets: dict[str, dict],
+    perp_symbols: set[str],
+    holders: dict[str, Group] | None = None,
+) -> list[dict]:
     rows: list[dict] = []
     for symbol, groups in by_symbol.items():
         priced = [g for g in groups if g.gecko_id in markets]
@@ -195,6 +224,7 @@ def assemble(by_symbol: dict[str, list[Group]], markets: dict[str, dict], perp_s
                 "rev_30d": r30,
                 "rev_prev_30d": r60,
                 "rev_1y": sum(g.r1y for g in same),
+                **_holders(same, holders or {}),
                 "mcap": _num(m.get("market_cap")) or None,
                 "fdv": _num(m.get("fully_diluted_valuation")) or None,
                 "price": _num(m.get("current_price")) or None,
@@ -232,18 +262,20 @@ async def _coingecko_markets(client: httpx.AsyncClient, ids: list[str]) -> dict[
 
 
 async def refresh(http: httpx.AsyncClient, hl_client, perp_names: list[str], now_ms: int) -> dict:
-    revenue_raw, cfg, spot = await asyncio.gather(
+    revenue_raw, holders_raw, cfg, spot = await asyncio.gather(
         _get_json(http, LLAMA_REVENUE_URL),
+        _get_json(http, LLAMA_HOLDERS_URL),
         _get_json(http, LLAMA_CONFIG_URL),
         hl_client._post_info({"type": "spotMeta"}),
     )
     groups = build_groups(revenue_raw.get("protocols", []), cfg)
+    holders = {g.key: g for g in build_groups(holders_raw.get("protocols", []), cfg, keep_all=True)}
     perp_symbols = {hl_symbol(n) for n in perp_names}
     spot_symbols = {str(t.get("name", "")).upper() for t in spot.get("tokens", [])}
     by_symbol = candidates(groups, perp_symbols, spot_symbols)
     ids = sorted({g.gecko_id for gs in by_symbol.values() for g in gs if g.gecko_id})
     markets = await _coingecko_markets(http, ids)
-    rows = assemble(by_symbol, markets, perp_symbols)
+    rows = assemble(by_symbol, markets, perp_symbols, holders)
     payload = {"ts": now_ms, "rows": rows}
     db.kv_set(_KV_KEY, now_ms, payload)
     return {"tokens": len(rows), "candidates": len(ids)}

@@ -8,7 +8,9 @@ import { colorPct, fmtAgo, fmtPct, fmtUsdLarge } from "../format";
 import { InfoTip } from "../components/InfoTip";
 import { AssetDetail } from "../components/AssetDetail";
 import {
+  annualHolders,
   annualRevenue,
+  holdersShare,
   fmtMultiple,
   liveValuation,
   median,
@@ -18,15 +20,18 @@ import {
   TAB_LABELS,
   TAB_ORDER,
   type Basis,
+  type Measure,
   type RevenueRow,
   type RevenueTab,
 } from "../revenue";
 
-type SortKey = "symbol" | "rev30" | "trend" | "annual" | "mcap" | "fdv" | "mcRev" | "fdvRev";
+type SortKey = "symbol" | "rev30" | "trend" | "annual" | "holders" | "mcap" | "fdv" | "mcRev" | "fdvRev";
 
 interface View {
   row: RevenueRow;
   annual: number;
+  holders: number | null;
+  share: number | null;
   trend: number | null;
   mcap: number | null;
   fdv: number | null;
@@ -39,6 +44,7 @@ const SORT_LABEL: Record<SortKey, string> = {
   rev30: "Revenus 30 j",
   trend: "Tendance",
   annual: "Revenus annuels",
+  holders: "Aux détenteurs",
   mcap: "MC",
   fdv: "FDV",
   mcRev: "MC / revenus",
@@ -56,6 +62,7 @@ export function RevenuePage() {
 
   const [tab, setTab] = useState<RevenueTab | "all">("all");
   const [basis, setBasis] = useState<Basis>("30d");
+  const [measure, setMeasure] = useState<Measure>("revenue");
   const [sort, setSort] = useState<SortKey>("annual");
   const [asc, setAsc] = useState(false);
   const [q, setQ] = useState("");
@@ -72,10 +79,23 @@ export function RevenuePage() {
     () =>
       rows.map((row) => {
         const annual = annualRevenue(row, basis);
+        const holders = annualHolders(row, basis);
+        // Base des multiples : tous les revenus, ou la part reversée aux détenteurs.
+        const base = measure === "revenue" ? annual : holders ?? 0;
         const { mcap, fdv } = liveValuation(row, row.listed === "perp" ? mids[row.symbol] : undefined);
-        return { row, annual, trend: revenueTrend(row), mcap, fdv, mcRev: multiple(mcap, annual), fdvRev: multiple(fdv, annual) };
+        return {
+          row,
+          annual,
+          holders,
+          share: holdersShare(row),
+          trend: revenueTrend(row),
+          mcap,
+          fdv,
+          mcRev: multiple(mcap, base),
+          fdvRev: multiple(fdv, base),
+        };
       }),
-    [rows, basis, mids]
+    [rows, basis, measure, mids]
   );
 
   const visible = useMemo(() => {
@@ -93,6 +113,8 @@ export function RevenuePage() {
           return v.trend;
         case "annual":
           return v.annual;
+        case "holders":
+          return v.holders;
         case "mcap":
           return v.mcap;
         case "fdv":
@@ -115,13 +137,13 @@ export function RevenuePage() {
   }, [views, tab, q, sort, asc]);
 
   const summary = useMemo(() => {
-    const total30 = visible.reduce((s, v) => s + v.row.rev_30d, 0);
+    const total30 = visible.reduce((s, v) => s + (measure === "revenue" ? v.row.rev_30d : v.row.hold_30d ?? 0), 0);
     return {
       total30,
       mcRev: median(visible.map((v) => v.mcRev).filter((m): m is number => m !== null)),
       fdvRev: median(visible.map((v) => v.fdvRev).filter((m): m is number => m !== null)),
     };
-  }, [visible]);
+  }, [visible, measure]);
 
   const perpBySymbol = useMemo(() => new Map((perps.data ?? []).map((m) => [m.name.toUpperCase(), m])), [perps.data]);
 
@@ -134,6 +156,7 @@ export function RevenuePage() {
   };
 
   const basisLabel = basis === "30d" ? "30 j annualisés" : "12 mois";
+  const per = measure === "revenue" ? "rev." : "dét.";
 
   return (
     <main className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 md:overflow-hidden md:p-4">
@@ -153,6 +176,11 @@ export function RevenuePage() {
             <span className="text-gray-300">Revenus</span> (DefiLlama) : la part des frais que garde le protocole — trésorerie et détenteurs du token —
             après rémunération des fournisseurs de liquidité. Pour une L1, ce sont surtout les frais brûlés ; pour une L2, la marge du séquenceur après
             les coûts de publication.
+          </li>
+          <li>
+            <span className="text-gray-300">Aux détenteurs</span> : la part de ces revenus qui revient aux détenteurs du token — rachats, burns,
+            distributions aux stakers du token. C'est l'équivalent d'un bénéfice distribué : un multiple calculé dessus se lit comme un PER. « Non
+            publié » signifie que DefiLlama ne suit pas ce flux pour ce protocole, pas qu'il est nul.
           </li>
           <li>
             Toutes les activités d'un même token sont additionnées : HYPE cumule le DEX de perps, le spot et les frais de la L1 ; UNI les versions V2 à V4.
@@ -202,6 +230,23 @@ export function RevenuePage() {
           ))}
         </span>
         <InfoTip text="Revenus annuels servant aux multiples : les 30 derniers jours × 365/30, ou la somme des 12 derniers mois." />
+        <span className="ml-1 text-gray-500">Multiples sur</span>
+        <span className="flex rounded-md border border-bg-border bg-bg-panel p-0.5">
+          {(
+            [
+              ["revenue", "revenus"],
+              ["holders", "revenus aux détenteurs"],
+            ] as [Measure, string][]
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              onClick={() => setMeasure(m)}
+              className={`rounded px-2 py-0.5 ${measure === m ? "bg-bg-hover text-white" : "text-gray-500 hover:text-gray-200"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </span>
         <select
           value={sort}
           onChange={(e) => {
@@ -220,8 +265,9 @@ export function RevenuePage() {
         </select>
         {visible.length > 0 && (
           <span className="text-gray-500">
-            Revenus 30 j cumulés <span className="text-gray-300">{fmtUsdLarge(summary.total30)}</span> · médiane MC/rev.{" "}
-            <span className="text-gray-300">{fmtMultiple(summary.mcRev)}</span> · FDV/rev.{" "}
+            {measure === "revenue" ? "Revenus" : "Reversé aux détenteurs"} 30 j cumulés{" "}
+            <span className="text-gray-300">{fmtUsdLarge(summary.total30)}</span> · médiane MC/{per}{" "}
+            <span className="text-gray-300">{fmtMultiple(summary.mcRev)}</span> · FDV/{per}{" "}
             <span className="text-gray-300">{fmtMultiple(summary.fdvRev)}</span>
           </span>
         )}
@@ -259,22 +305,47 @@ export function RevenuePage() {
                 <Th k="annual" sort={sort} asc={asc} onSort={toggleSort} help={`Base des multiples : ${basisLabel}.`}>
                   Rev. annuels
                 </Th>
+                <Th
+                  k="holders"
+                  sort={sort}
+                  asc={asc}
+                  onSort={toggleSort}
+                  secondary
+                  help={`Revenus reversés aux détenteurs du token (rachats, burns, distributions), ${basisLabel}. En dessous : la part des revenus que cela représente.`}
+                >
+                  Aux détenteurs
+                </Th>
                 <Th k="mcap" sort={sort} asc={asc} onSort={toggleSort} secondary help="Capitalisation : offre en circulation × prix.">
                   MC
                 </Th>
                 <Th k="fdv" sort={sort} asc={asc} onSort={toggleSort} secondary help="Valorisation totalement diluée : offre maximale × prix.">
                   FDV
                 </Th>
-                <Th k="mcRev" sort={sort} asc={asc} onSort={toggleSort} help="Capitalisation / revenus annuels." secondary>
-                  MC / rev.
+                <Th
+                  k="mcRev"
+                  sort={sort}
+                  asc={asc}
+                  onSort={toggleSort}
+                  help={measure === "revenue" ? "Capitalisation / revenus annuels." : "Capitalisation / revenus annuels reversés aux détenteurs (équivalent d'un PER)."}
+                  secondary
+                >
+                  MC / {per}
                 </Th>
-                <Th k="fdvRev" sort={sort} asc={asc} onSort={toggleSort} help="FDV / revenus annuels." last secondary>
-                  FDV / rev.
+                <Th
+                  k="fdvRev"
+                  sort={sort}
+                  asc={asc}
+                  onSort={toggleSort}
+                  help={measure === "revenue" ? "FDV / revenus annuels." : "FDV / revenus annuels reversés aux détenteurs."}
+                  last
+                  secondary
+                >
+                  FDV / {per}
                 </Th>
                 {/* Téléphone : les deux multiples dans une seule colonne. */}
                 <th className="px-2 py-2 text-right font-medium sm:hidden">
                   MC · FDV
-                  <br />/ rev.
+                  <br />/ {per}
                 </th>
               </tr>
             </thead>
@@ -309,6 +380,18 @@ export function RevenuePage() {
                       {v.trend === null ? "—" : fmtPct(v.trend).replace(/\.\d+%/, "%")}
                     </Td>
                     <Td className="font-semibold text-gray-100">{v.annual > 0 ? fmtUsdLarge(v.annual) : "—"}</Td>
+                    <td className="hidden whitespace-nowrap px-3 py-1.5 text-right tabular-nums sm:table-cell">
+                      {v.holders === null ? (
+                        <span className="text-gray-600" title="DefiLlama ne publie pas ce flux pour ce protocole : inconnu, pas forcément nul.">
+                          non publié
+                        </span>
+                      ) : (
+                        <>
+                          <div className={v.holders > 0 ? "text-gray-200" : "text-gray-500"}>{v.holders > 0 ? fmtUsdLarge(v.holders) : "0 $"}</div>
+                          {v.share !== null && <div className="text-[11px] text-gray-500">{Math.round(v.share * 100)} % des revenus</div>}
+                        </>
+                      )}
+                    </td>
                     <Td secondary>{v.mcap === null ? "—" : fmtUsdLarge(v.mcap)}</Td>
                     <Td secondary>{v.fdv === null ? "—" : fmtUsdLarge(v.fdv)}</Td>
                     <Td secondary className={`font-semibold ${multipleTone(v.mcRev)}`}>{fmtMultiple(v.mcRev)}</Td>
@@ -322,7 +405,7 @@ export function RevenuePage() {
               })}
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center text-gray-500">
+                  <td colSpan={11} className="py-10 text-center text-gray-500">
                     Aucun token ne correspond.
                   </td>
                 </tr>

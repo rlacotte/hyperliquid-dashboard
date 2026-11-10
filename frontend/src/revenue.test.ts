@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { annualRevenue, fmtMultiple, liveValuation, median, multiple, revenueTrend, type RevenueRow } from "./revenue";
+import { annualHolders, annualRevenue, fmtMultiple, holdersShare, liveValuation, median, multiple, revenueTrend, type RevenueRow } from "./revenue";
 
 const row = (over: Partial<RevenueRow> = {}): RevenueRow => ({
   symbol: "UNI",
@@ -28,6 +28,30 @@ describe("revenus annuels", () => {
   it("tendance sur 30 jours", () => {
     expect(revenueTrend(row())).toBeCloseTo(0.5, 9);
     expect(revenueTrend(row({ rev_prev_30d: 0 }))).toBeNull();
+  });
+});
+
+describe("revenus aux détenteurs", () => {
+  it("annualisés comme les revenus", () => {
+    const r = row({ hold_30d: 3e6, hold_1y: 30e6 });
+    expect(annualHolders(r, "30d")).toBeCloseTo(3e6 * 365 / 30, 6);
+    expect(annualHolders(r, "1y")).toBe(30e6);
+  });
+
+  it("non publié n'est pas zéro", () => {
+    expect(annualHolders(row({ hold_30d: null }), "30d")).toBeNull();
+    expect(annualHolders(row(), "30d")).toBeNull(); // relevé antérieur à la donnée
+    expect(annualHolders(row({ hold_30d: 0, hold_1y: 0 }), "30d")).toBe(0);
+  });
+
+  it("part reversée", () => {
+    expect(holdersShare(row({ hold_30d: 4.5e6 }))).toBeCloseTo(0.5, 9);
+    expect(holdersShare(row({ hold_30d: 12e6 }))).toBe(1); // entités différentes : bornée
+    expect(holdersShare(row({ hold_30d: null }))).toBeNull();
+  });
+
+  it("un multiple sur des revenus aux détenteurs nuls n'existe pas", () => {
+    expect(multiple(4e9, annualHolders(row({ hold_30d: 0, hold_1y: 0 }), "30d") ?? 0)).toBeNull();
   });
 });
 

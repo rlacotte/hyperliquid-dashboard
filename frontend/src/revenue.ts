@@ -27,6 +27,15 @@ export interface RevenueRow {
   rev_30d: number;
   rev_prev_30d: number;
   rev_1y: number;
+  /**
+   * Part des revenus qui revient aux détenteurs du token (rachats, burns,
+   * distributions). null : DefiLlama ne publie rien pour ce protocole — ce qui
+   * n'est pas la même chose que 0 (publié, rien n'est reversé). Absent des
+   * relevés antérieurs à l'ajout de la donnée.
+   */
+  hold_30d?: number | null;
+  hold_prev_30d?: number | null;
+  hold_1y?: number | null;
   mcap: number | null;
   fdv: number | null;
   /** Prix CoinGecko au moment du relevé, référence de l'ajustement en direct. */
@@ -59,6 +68,20 @@ export type Basis = "30d" | "1y";
 
 export function annualRevenue(r: RevenueRow, basis: Basis): number {
   return basis === "30d" ? (r.rev_30d * 365) / 30 : r.rev_1y;
+}
+
+/** Ce que divisent les multiples : tous les revenus, ou seulement ceux reversés aux détenteurs. */
+export type Measure = "revenue" | "holders";
+
+export function annualHolders(r: RevenueRow, basis: Basis): number | null {
+  if (r.hold_30d === null || r.hold_30d === undefined) return null;
+  return basis === "30d" ? (r.hold_30d * 365) / 30 : r.hold_1y ?? null;
+}
+
+/** Part des revenus reversée aux détenteurs, sur 30 jours (bornée à 100 %). */
+export function holdersShare(r: RevenueRow): number | null {
+  if (r.hold_30d === null || r.hold_30d === undefined || !(r.rev_30d > 0)) return null;
+  return Math.min(1, Math.max(0, r.hold_30d / r.rev_30d));
 }
 
 /** MC et FDV ramenées au prix en direct, si on en a un. */

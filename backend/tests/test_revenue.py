@@ -119,6 +119,32 @@ def test_multiples_et_tri():
     assert uni["mcap"] == 4e9 and uni["fdv"] == 6e9 and uni["price"] == 7
 
 
+HOLDERS = [
+    entry("Uniswap V3", 5e6, parent="parent#uniswap", did="1"),
+    entry("Hyperliquid Perps", 60e6, cat="Derivatives", parent="parent#hyperliquid", did="9"),
+    entry("Hyperliquid L1", 1e6, chain=True),
+    entry("Lido", 0.0, cat="Liquid Staking", did="3"),
+]
+
+
+def rows_with_holders():
+    groups = revenue.build_groups(REV, CFG)
+    holders = {g.key: g for g in revenue.build_groups(HOLDERS, CFG, keep_all=True)}
+    return {r["symbol"]: r for r in revenue.assemble(revenue.candidates(groups, PERPS, SPOT), MARKETS, PERPS, holders)}
+
+
+def test_revenus_aux_detenteurs_sommes_sur_les_memes_entites():
+    r = rows_with_holders()
+    assert r["HYPE"]["hold_30d"] == 61e6          # perps + L1
+    assert r["UNI"]["hold_30d"] == 5e6            # V3 seulement : V2 ne reverse rien
+
+
+def test_publie_a_zero_n_est_pas_inconnu():
+    r = rows_with_holders()
+    assert r["LDO"]["hold_30d"] == 0.0            # publié : rien n'est reversé
+    assert r["ETH"]["hold_30d"] is None           # rien de publié : inconnu
+
+
 def test_symboles_hyperliquid():
     assert revenue.hl_symbol("kPEPE") == "PEPE"
     assert revenue.hl_symbol("kBONK") == "BONK"
