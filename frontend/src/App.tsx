@@ -14,6 +14,7 @@ import { SmartMoneyPage } from "./pages/SmartMoneyPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { SignalsPage } from "./pages/SignalsPage";
 import { PredictionsPage } from "./pages/PredictionsPage";
+import { RevenuePage } from "./pages/RevenuePage";
 import { WalletWatcher } from "./components/WalletWatcher";
 
 const NAV: NavItem[] = [
@@ -23,6 +24,7 @@ const NAV: NavItem[] = [
   { page: "signals", label: "Signaux" },
   { page: "funding", label: "Funding" },
   { page: "predictions", label: "Prédictions" },
+  { page: "revenue", label: "Revenus" },
   { page: "wallet", label: "Wallet" },
 ];
 
@@ -45,16 +47,16 @@ export default function App() {
             <span className="text-blue-500">⚡</span> <span className="hidden xl:inline">Hyperliquid Dashboard</span>
             <span className="xl:hidden">Hyperliquid</span>
           </a>
-          <div className="hidden min-w-0 lg:block">
+          <div className="hidden min-w-0 xl:block">
             <Nav items={NAV} current={route.page} />
           </div>
           <div className="ml-auto shrink-0">
             <StatusBadge ws={ws} signalsTs={signalsTs} signalsError={health.error} />
           </div>
         </div>
-        {/* Sous 1024 px, navigation sur sa propre ligne, défilable : sept
-            sections + logo + état (~1000 px) ne tiennent pas sur une ligne. */}
-        <div className="no-scrollbar overflow-x-auto px-2 pb-1.5 lg:hidden">
+        {/* Sous 1280 px, navigation sur sa propre ligne, défilable : huit
+            sections + logo + état (~1100 px) ne tiennent pas sur une ligne. */}
+        <div className="no-scrollbar overflow-x-auto px-2 pb-1.5 xl:hidden">
           <Nav items={NAV} current={route.page} />
         </div>
       </header>
@@ -79,6 +81,8 @@ export default function App() {
           <SignalsPage />
         ) : route.page === "predictions" ? (
           <PredictionsPage />
+        ) : route.page === "revenue" ? (
+          <RevenuePage />
         ) : (
           // Les sections inconnues retombent sur les marchés : un lien partagé
           // ne doit jamais afficher une page vide.

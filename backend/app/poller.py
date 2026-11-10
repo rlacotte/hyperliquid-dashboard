@@ -245,6 +245,15 @@ async def _poll_with(client: HyperliquidClient) -> dict:
     except Exception:
         logger.exception("Erreur track record")
 
+    # Revenus des protocoles et multiples MC/FDV : toutes les 3 h (~14 Mo
+    # DefiLlama + un appel CoinGecko). En dernier : jamais avant les alertes.
+    revenue_info = None
+    try:
+        from . import revenue
+        revenue_info = await revenue.maybe_refresh(client._client, client, [a.coin for a in crypto], now_ms)
+    except Exception:
+        logger.exception("Erreur revenus des protocoles")
+
     maintenance = _maybe_run_maintenance(now_ms)
 
     return {
@@ -260,6 +269,7 @@ async def _poll_with(client: HyperliquidClient) -> dict:
         "telegram": telegram_info,
         "leaderboard": leaderboard_info,
         "track_record": track_info,
+        "revenue": revenue_info,
         "maintenance": maintenance,
         "duration_ms": int((time.time() - started) * 1000),
     }
