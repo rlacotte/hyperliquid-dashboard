@@ -35,6 +35,7 @@ export const api = {
   globalMetrics: () => getJson<GlobalMetrics>("/api/global-metrics"),
   trackRecord: () => getJson<import("./signals").TrackRecord>("/api/track-record"),
   revenue: () => getJson<import("./revenue").RevenueResponse>("/api/revenue"),
+  scenarios: () => getJson<import("./scenario").RawMatrix>("/api/scenarios"),
   fundingArb: () =>
     getJson<{
       ts: number | null;

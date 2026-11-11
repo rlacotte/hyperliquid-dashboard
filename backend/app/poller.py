@@ -254,6 +254,15 @@ async def _poll_with(client: HyperliquidClient) -> dict:
     except Exception:
         logger.exception("Erreur revenus des protocoles")
 
+    # Historique journalier des perps (simulateur de scénarios BTC) : quelques
+    # coins par cycle après minuit UTC, puis publication de la matrice.
+    scenarios_info = None
+    try:
+        from . import scenarios
+        scenarios_info = await scenarios.process(client, universe, now_ms)
+    except Exception:
+        logger.exception("Erreur historique des scénarios")
+
     maintenance = _maybe_run_maintenance(now_ms)
 
     return {
@@ -270,6 +279,7 @@ async def _poll_with(client: HyperliquidClient) -> dict:
         "leaderboard": leaderboard_info,
         "track_record": track_info,
         "revenue": revenue_info,
+        "scenarios": scenarios_info,
         "maintenance": maintenance,
         "duration_ms": int((time.time() - started) * 1000),
     }

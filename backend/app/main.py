@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import cache, config, db, poller
 from .hyperliquid_client import get_client
-from .routes import alerts, cron, funding_arb, global_metrics, leaderboard, markets, replay, revenue, signals, telegram
+from .routes import alerts, cron, funding_arb, global_metrics, leaderboard, markets, replay, revenue, scenarios, signals, telegram
 
 logging.basicConfig(
     level=logging.INFO,
@@ -77,6 +77,7 @@ app.include_router(signals.router)
 app.include_router(funding_arb.router)
 app.include_router(telegram.router)
 app.include_router(revenue.router)
+app.include_router(scenarios.router)
 
 
 # --- Cache CDN sur les routes de lecture --------------------------------------
@@ -100,6 +101,8 @@ _CACHE_RULES: tuple[tuple[re.Pattern, int], ...] = (
     (re.compile(r"^/api/leaderboard$"), 300),
     (re.compile(r"^/api/track-record$"), 300),
     (re.compile(r"^/api/funding-arb$"), 60),
+    # Matrice de rendements : republiée une fois par jour.
+    (re.compile(r"^/api/scenarios$"), 1800),
     # Revenus : recalculés toutes les 3 h côté serveur.
     (re.compile(r"^/api/revenue$"), 600),
     # Nom du bot : ne change qu'à sa (re)configuration.

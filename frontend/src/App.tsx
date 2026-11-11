@@ -15,6 +15,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { SignalsPage } from "./pages/SignalsPage";
 import { PredictionsPage } from "./pages/PredictionsPage";
 import { RevenuePage } from "./pages/RevenuePage";
+import { ScenariosPage } from "./pages/ScenariosPage";
 import { WalletWatcher } from "./components/WalletWatcher";
 
 const NAV: NavItem[] = [
@@ -25,6 +26,7 @@ const NAV: NavItem[] = [
   { page: "funding", label: "Funding" },
   { page: "predictions", label: "Prédictions" },
   { page: "revenue", label: "Revenus" },
+  { page: "scenarios", label: "Scénarios" },
   { page: "wallet", label: "Wallet" },
 ];
 
@@ -83,6 +85,8 @@ export default function App() {
           <PredictionsPage />
         ) : route.page === "revenue" ? (
           <RevenuePage />
+        ) : route.page === "scenarios" ? (
+          <ScenariosPage />
         ) : (
           // Les sections inconnues retombent sur les marchés : un lien partagé
           // ne doit jamais afficher une page vide.

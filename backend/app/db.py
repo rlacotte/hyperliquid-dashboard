@@ -249,6 +249,23 @@ def init_db() -> None:
             """
         )
 
+        # Historique journalier des perps (simulateur de scénarios BTC) : une
+        # ligne par coin, cours de clôture UTC du premier jour coté au dernier
+        # jour complet. `tried_day` évite qu'un coin en échec ne bloque la passe.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS price_history (
+                coin TEXT PRIMARY KEY,
+                first_day INTEGER NOT NULL,
+                updated_day INTEGER NOT NULL,
+                tried_day INTEGER NOT NULL DEFAULT 0,
+                delisted BOOLEAN NOT NULL DEFAULT FALSE,
+                closes JSONB NOT NULL,
+                volumes JSONB NOT NULL DEFAULT '[]'::jsonb
+            )
+            """
+        )
+
         # Migration unique : avant la double résolution, les alertes de plus de
         # ~52 jours étaient tentées en bougies de 15 min (indisponibles si loin)
         # et épuisaient leurs tentatives sans mesure. On les réarme une fois ;
@@ -1078,3 +1095,48 @@ def tg_gc(now_ms: int) -> dict:
             "DELETE FROM wallet_cursors c WHERE NOT EXISTS (SELECT 1 FROM tg_wallets w WHERE w.address = c.address)"
         ).rowcount
     return {"subs": subs, "cursors": cursors}
+
+
+# --- Historique journalier (scénarios BTC) ---------------------------------------
+def price_history_status() -> dict[str, dict]:
+    """{coin: {updated_day, tried_day, delisted}} — sans les cours, pour planifier."""
+    with get_conn() as conn:
+        rows = conn.execute("SELECT coin, updated_day, tried_day, delisted FROM price_history").fetchall()
+    return {r["coin"]: r for r in rows}
+
+
+def price_history_get(coins: list[str]) -> dict[str, dict]:
+    if not coins:
+        return {}
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT coin, first_day, updated_day, closes, volumes FROM price_history WHERE coin = ANY(%s)", (coins,)
+        ).fetchall()
+    return {r["coin"]: r for r in rows}
+
+
+def price_history_upsert(rows: list[dict]) -> None:
+    """rows : {coin, first_day, updated_day, tried_day, delisted, closes, volumes}."""
+    if not rows:
+        return
+    with get_conn() as conn:
+        with conn.cursor() as c:
+            c.executemany(
+                "INSERT INTO price_history (coin, first_day, updated_day, tried_day, delisted, closes, volumes) "
+                "VALUES (%(coin)s, %(first_day)s, %(updated_day)s, %(tried_day)s, %(delisted)s, %(closes)s, %(volumes)s) "
+                "ON CONFLICT (coin) DO UPDATE SET first_day = EXCLUDED.first_day, updated_day = EXCLUDED.updated_day, "
+                "tried_day = EXCLUDED.tried_day, delisted = EXCLUDED.delisted, closes = EXCLUDED.closes, volumes = EXCLUDED.volumes",
+                [{**r, "closes": Jsonb(r["closes"]), "volumes": Jsonb(r["volumes"])} for r in rows],
+            )
+
+
+def price_history_mark_tried(coins: list[str], day: int) -> None:
+    if not coins:
+        return
+    with get_conn() as conn:
+        conn.execute("UPDATE price_history SET tried_day = %s WHERE coin = ANY(%s)", (day, coins))
+
+
+def price_history_all() -> list[dict]:
+    with get_conn() as conn:
+        return conn.execute("SELECT coin, first_day, updated_day, delisted, closes, volumes FROM price_history").fetchall()

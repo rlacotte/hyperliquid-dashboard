@@ -9,14 +9,14 @@ import { useSyncExternalStore } from "react";
  * navigateur : aucune configuration serveur, et les URLs restent partageables.
  */
 
-export type Page = "markets" | "funding" | "smart-money" | "wallet" | "tape" | "signals" | "predictions" | "revenue";
+export type Page = "markets" | "funding" | "smart-money" | "wallet" | "tape" | "signals" | "predictions" | "revenue" | "scenarios";
 
 export interface Route {
   page: Page;
   params: string[];
 }
 
-const PAGES: Page[] = ["markets", "funding", "smart-money", "wallet", "tape", "signals", "predictions", "revenue"];
+const PAGES: Page[] = ["markets", "funding", "smart-money", "wallet", "tape", "signals", "predictions", "revenue", "scenarios"];
 
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
