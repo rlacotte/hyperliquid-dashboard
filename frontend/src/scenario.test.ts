@@ -119,7 +119,8 @@ describe("passé rejoué", () => {
 
   it("liquidité : inconnue acceptée, insuffisante écartée", () => {
     const m = parseMatrix(universe(x, MIN_COINS, [coin("THIN", x, 0, 1, { liq: 50 }), coin("OLD", x, 0, 1, { liq: LIQ_UNKNOWN })]));
-    const w = buildPanel(m, 4, 60).at(-1)!;
+    const panel = buildPanel(m, 4, 60);
+    const w = panel[panel.length - 1];
     const names = w.idx.map((i) => m.names[i]);
     expect(names).toContain("OLD");
     expect(names).not.toContain("THIN");
