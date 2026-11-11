@@ -112,8 +112,14 @@ export function ScenariosPage() {
     if (past.length < 20) return null;
     const rs = past.map((p) => p.R);
     const flat = rs.map(() => 1);
-    return { low: toPct(weightedQuantile(rs, flat, 0.05)), high: toPct(weightedQuantile(rs, flat, 0.95)) };
-  }, [past]);
+    // Première date rejouée : ancre de la matrice moins le nombre de semaines qui la séparent de la fin.
+    const firstDay = matrix ? matrix.anchorDay - 7 * (matrix.weeks - past[0].s) : 0;
+    return {
+      low: toPct(weightedQuantile(rs, flat, 0.05)),
+      high: toPct(weightedQuantile(rs, flat, 0.95)),
+      since: new Date(firstDay * 86_400_000).getUTCFullYear(),
+    };
+  }, [past, matrix]);
 
   const perpByName = useMemo(() => new Map((perps.data ?? []).map((m) => [m.name, m])), [perps.data]);
 
@@ -190,7 +196,7 @@ export function ScenariosPage() {
               ))}
               {btcHistory && (
                 <span className="ml-auto text-gray-500">
-                  Sur {horizonLabel}, le BTC a fait entre {pc(btcHistory.low)} et {pc(btcHistory.high)} neuf fois sur dix depuis 2021.
+                  Sur {horizonLabel}, le BTC a fait entre {pc(btcHistory.low)} et {pc(btcHistory.high)} neuf fois sur dix depuis {btcHistory.since}.
                 </span>
               )}
             </div>
@@ -319,7 +325,8 @@ export function ScenariosPage() {
               <li>
                 Le passé ne se reproduit qu'en partie. La méthode est donc rejouée à chaque date passée avec les seules données connues alors, et on mesure
                 quelle part des écarts entre tokens s'est retrouvée. Chaque mesure est ramenée vers la moyenne dans cette proportion : sans cela, les gains
-                annoncés seraient 3 à 5 fois trop élevés.
+                annoncés seraient 3 à 5 fois trop élevés. Ces trois proportions sont, elles, estimées sur l'ensemble de la période : le bilan du passé
+                affiché plus haut en est donc légèrement embelli.
               </li>
               <li>
                 Portefeuille : les tokens au rendement attendu le plus élevé à l'achat, les plus faibles à la vente, à parts égales dans chaque jambe, tenus
