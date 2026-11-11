@@ -181,6 +181,14 @@ def _token_tab(groups: list[Group]) -> tuple[str, str | None]:
     return (protocols[0].tab, protocols[0].category) if protocols else ("other", None)
 
 
+def _pct(v) -> float | None:
+    """CoinGecko donne des pourcentages (12.5) ; on stocke des fractions (0.125)."""
+    try:
+        return float(v) / 100 if v is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _holders(same: list[Group], holders: dict[str, Group]) -> dict:
     """Revenus aux détenteurs des mêmes entités ; None si DefiLlama n'en publie
     pour aucune (inconnu, à ne pas confondre avec zéro)."""
@@ -228,6 +236,8 @@ def assemble(
                 "mcap": _num(m.get("market_cap")) or None,
                 "fdv": _num(m.get("fully_diluted_valuation")) or None,
                 "price": _num(m.get("current_price")) or None,
+                "px_chg_7d": _pct(m.get("price_change_percentage_7d_in_currency")),
+                "px_chg_30d": _pct(m.get("price_change_percentage_30d_in_currency")),
                 "sources": [
                     {"name": g.name, "kind": g.kind, "category": g.category, "rev_30d": g.r30}
                     for g in sorted(same, key=lambda g: -g.r30)
@@ -254,7 +264,8 @@ async def _coingecko_markets(client: httpx.AsyncClient, ids: list[str]) -> dict[
         data = await _get_json(
             client,
             f"{config.COINGECKO_BASE_URL}/coins/markets",
-            params={"vs_currency": "usd", "ids": ",".join(chunk), "per_page": 250},
+            # Variations 7 j et 30 j : la « dynamique du prix » du modèle de sélection.
+            params={"vs_currency": "usd", "ids": ",".join(chunk), "per_page": 250, "price_change_percentage": "7d,30d"},
             headers=headers,
         )
         out.update({m["id"]: m for m in data if isinstance(m, dict) and m.get("id")})

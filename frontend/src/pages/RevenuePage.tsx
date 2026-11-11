@@ -4,7 +4,8 @@ import { hl, type Market } from "../hl/client";
 import { useHlPoll, useLiveMidsAll } from "../hl/hooks";
 import { usePolling } from "../hooks/usePolling";
 import { useNow } from "../hooks/useNow";
-import { colorPct, fmtAgo, fmtPct, fmtUsdLarge } from "../format";
+import { colorPct, fmtAgo, fmtPct, fmtUsdLarge, fundingApr } from "../format";
+import { FACTOR_LABELS, MIN_ANNUAL_REVENUE, MIN_MCAP, pick, reasons, scoreAll, WEIGHTS, type Scored } from "../selection";
 import { InfoTip } from "../components/InfoTip";
 import { AssetDetail } from "../components/AssetDetail";
 import {
@@ -25,7 +26,7 @@ import {
   type RevenueTab,
 } from "../revenue";
 
-type SortKey = "symbol" | "rev30" | "trend" | "annual" | "holders" | "mcap" | "fdv" | "mcRev" | "fdvRev";
+type SortKey = "symbol" | "rev30" | "trend" | "annual" | "holders" | "mcap" | "fdv" | "mcRev" | "fdvRev" | "score";
 
 interface View {
   row: RevenueRow;
@@ -37,6 +38,8 @@ interface View {
   fdv: number | null;
   mcRev: number | null;
   fdvRev: number | null;
+  /** Score du modèle de sélection ; null hors de son périmètre. */
+  score: number | null;
 }
 
 const SORT_LABEL: Record<SortKey, string> = {
@@ -49,6 +52,7 @@ const SORT_LABEL: Record<SortKey, string> = {
   fdv: "FDV",
   mcRev: "MC / revenus",
   fdvRev: "FDV / revenus",
+  score: "Score du modèle",
 };
 
 /** Les multiples se lisent du plus bas (bon marché) au plus haut ; le reste, du plus grand au plus petit. */
@@ -75,6 +79,15 @@ export function RevenuePage() {
     return c;
   }, [rows]);
 
+  // Modèle de sélection : prix en direct et funding Hyperliquid en plus des relevés.
+  const scored = useMemo(() => {
+    const aprBySymbol: Record<string, number> = {};
+    for (const m of perps.data ?? []) if (m.funding !== null) aprBySymbol[m.name.toUpperCase()] = fundingApr(m.funding);
+    return scoreAll(rows, { livePx: mids, fundingApr: aprBySymbol });
+  }, [rows, mids, perps.data]);
+  const scoreBySymbol = useMemo(() => new Map(scored.map((s) => [s.row.symbol, s.score])), [scored]);
+  const picks = useMemo(() => pick(scored), [scored]);
+
   const views: View[] = useMemo(
     () =>
       rows.map((row) => {
@@ -93,9 +106,10 @@ export function RevenuePage() {
           fdv,
           mcRev: multiple(mcap, base),
           fdvRev: multiple(fdv, base),
+          score: scoreBySymbol.get(row.symbol) ?? null,
         };
       }),
-    [rows, basis, measure, mids]
+    [rows, basis, measure, mids, scoreBySymbol]
   );
 
   const visible = useMemo(() => {
@@ -123,6 +137,8 @@ export function RevenuePage() {
           return v.mcRev;
         case "fdvRev":
           return v.fdvRev;
+        case "score":
+          return v.score;
       }
     };
     return list.sort((a, b) => {
@@ -279,6 +295,17 @@ export function RevenuePage() {
         />
       </div>
 
+      {data.data && (
+        <ModelPicks
+          picks={picks}
+          eligible={scored.length}
+          onOpen={(symbol) => {
+            const m = perpBySymbol.get(symbol) ?? perpBySymbol.get(`K${symbol}`);
+            if (m) setSelected(m);
+          }}
+        />
+      )}
+
       {data.error && !data.data ? (
         <p className="text-sm text-gray-400">
           {data.error.includes("503") ? "Revenus pas encore collectés : ils apparaîtront au prochain cycle de collecte (quelques minutes)." : `Erreur : ${data.error}`}
@@ -342,6 +369,17 @@ export function RevenuePage() {
                 >
                   FDV / {per}
                 </Th>
+                <Th
+                  k="score"
+                  sort={sort}
+                  asc={asc}
+                  onSort={toggleSort}
+                  secondary
+                  last
+                  help="Score du modèle de sélection, de −1 (le moins favorable) à +1 (le plus favorable). Vide hors de son périmètre : L1/L2, spot, MC < 50 M$, revenus < 1 M$/an."
+                >
+                  Score
+                </Th>
                 {/* Téléphone : les deux multiples dans une seule colonne. */}
                 <th className="px-2 py-2 text-right font-medium sm:hidden">
                   MC · FDV
@@ -396,6 +434,9 @@ export function RevenuePage() {
                     <Td secondary>{v.fdv === null ? "—" : fmtUsdLarge(v.fdv)}</Td>
                     <Td secondary className={`font-semibold ${multipleTone(v.mcRev)}`}>{fmtMultiple(v.mcRev)}</Td>
                     <Td secondary className={multipleTone(v.fdvRev)}>{fmtMultiple(v.fdvRev)}</Td>
+                    <Td secondary className={v.score === null ? "text-gray-700" : scoreTone(v.score)}>
+                      {v.score === null ? "—" : fmtScore(v.score)}
+                    </Td>
                     <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums sm:hidden">
                       <div className={`font-semibold ${multipleTone(v.mcRev)}`}>{fmtMultiple(v.mcRev)}</div>
                       <div className={`text-[11px] ${multipleTone(v.fdvRev)}`}>{fmtMultiple(v.fdvRev)}</div>
@@ -405,7 +446,7 @@ export function RevenuePage() {
               })}
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="py-10 text-center text-gray-500">
+                  <td colSpan={12} className="py-10 text-center text-gray-500">
                     Aucun token ne correspond.
                   </td>
                 </tr>
@@ -471,5 +512,87 @@ function Td({ children, className = "text-gray-300", secondary }: { children: Re
     <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums sm:px-3 ${className} ${secondary ? "hidden sm:table-cell" : ""}`}>
       {children}
     </td>
+  );
+}
+
+const fmtScore = (x: number) => `${x >= 0 ? "+" : ""}${x.toFixed(2)}`;
+const scoreTone = (x: number) => (x >= 0.15 ? "text-green-400" : x <= -0.15 ? "text-red-400" : "text-gray-400");
+
+/**
+ * Trois candidats à l'achat, trois à la vente, selon le modèle de sélection.
+ * Les raisons affichées sont les critères qui pèsent le plus dans le sens du
+ * classement : chaque ligne est vérifiable dans le tableau.
+ */
+function ModelPicks({
+  picks,
+  eligible,
+  onOpen,
+}: {
+  picks: { buy: Scored[]; sell: Scored[] };
+  eligible: number;
+  onOpen: (symbol: string) => void;
+}) {
+  return (
+    <details open className="shrink-0 rounded-lg border border-bg-border bg-bg-panel p-3">
+      <summary className="cursor-pointer text-sm font-medium text-gray-200">
+        Sélection du modèle{" "}
+        <span className="text-xs font-normal text-gray-500">
+          — {eligible} tokens éligibles : perps, hors L1/L2, MC ≥ {fmtUsdLarge(MIN_MCAP)}, revenus ≥ {fmtUsdLarge(MIN_ANNUAL_REVENUE)}/an
+        </span>
+      </summary>
+      <div className="mt-3 space-y-3">
+        <PickRow title="Candidats à l'achat" side="buy" items={picks.buy} onOpen={onOpen} />
+        <PickRow title="Candidats à la vente" side="sell" items={picks.sell} onOpen={onOpen} />
+      </div>
+      <p className="mt-3 text-[11px] leading-relaxed text-gray-500">
+        Classement mécanique sur six critères publics :{" "}
+        {(Object.keys(WEIGHTS) as (keyof typeof WEIGHTS)[]).map((k, i) => (
+          <span key={k}>
+            {i > 0 && " · "}
+            {FACTOR_LABELS[k].split(" (")[0].toLowerCase()} {Math.round(WEIGHTS[k] * 100)} %
+          </span>
+        ))}
+        . <span className="text-gray-400">Ce n'est pas un conseil en investissement.</span> Le modèle n'a pas été validé sur l'historique ; il ignore
+        les déblocages de tokens, la gouvernance, la concurrence et les risques propres à chaque protocole. « Vente » désigne le profil le moins
+        favorable selon ces critères, pas une baisse annoncée.
+      </p>
+    </details>
+  );
+}
+
+function PickRow({ title, side, items, onOpen }: { title: string; side: "buy" | "sell"; items: Scored[]; onOpen: (symbol: string) => void }) {
+  const tone = side === "buy" ? "text-green-400" : "text-red-400";
+  return (
+    <div>
+      <h3 className={`mb-1.5 text-xs font-semibold uppercase tracking-wide ${tone}`}>{title}</h3>
+      {items.length === 0 ? (
+        <p className="text-xs text-gray-500">Aucun token ne se détache nettement {side === "buy" ? "à la hausse" : "à la baisse"}.</p>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-3">
+          {items.map((s) => (
+            <button
+              key={s.row.symbol}
+              onClick={() => onOpen(s.row.symbol)}
+              className="rounded-md border border-bg-border bg-bg-base p-2.5 text-left transition-colors hover:border-gray-600"
+            >
+              <div className="flex items-baseline gap-2">
+                <span className="font-semibold text-white">{s.row.symbol}</span>
+                <span className="truncate text-[11px] text-gray-500">{s.row.name}</span>
+                <span className={`ml-auto text-xs font-semibold tabular-nums ${tone}`} title="Score du modèle, de −1 à +1">
+                  {fmtScore(s.score)}
+                </span>
+              </div>
+              <ul className="mt-1.5 space-y-0.5 text-[11px] leading-snug text-gray-400">
+                {reasons(s, side).map((f) => (
+                  <li key={f.key} title={FACTOR_LABELS[f.key]}>
+                    <span className={side === "buy" ? "text-green-500" : "text-red-500"}>{side === "buy" ? "+" : "−"}</span> {f.text}
+                  </li>
+                ))}
+              </ul>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

@@ -40,6 +40,9 @@ export interface RevenueRow {
   fdv: number | null;
   /** Prix CoinGecko au moment du relevé, référence de l'ajustement en direct. */
   price: number | null;
+  /** Variations du prix (fractions), CoinGecko. Absentes des relevés antérieurs. */
+  px_chg_7d?: number | null;
+  px_chg_30d?: number | null;
   sources: RevenueSource[];
 }
 

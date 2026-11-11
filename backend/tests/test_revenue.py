@@ -52,7 +52,8 @@ REV = [
 ]
 
 MARKETS = {
-    "uniswap": {"market_cap": 4e9, "fully_diluted_valuation": 6e9, "current_price": 7},
+    "uniswap": {"market_cap": 4e9, "fully_diluted_valuation": 6e9, "current_price": 7,
+                "price_change_percentage_7d_in_currency": -3.5, "price_change_percentage_30d_in_currency": 12.0},
     "hyperliquid": {"market_cap": 17e9, "fully_diluted_valuation": 70e9, "current_price": 50},
     "ethereum": {"market_cap": 250e9, "fully_diluted_valuation": 250e9, "current_price": 2000},
     "arbitrum": {"market_cap": 1e9, "fully_diluted_valuation": 1.6e9, "current_price": 0.2},
@@ -143,6 +144,12 @@ def test_publie_a_zero_n_est_pas_inconnu():
     r = rows_with_holders()
     assert r["LDO"]["hold_30d"] == 0.0            # publié : rien n'est reversé
     assert r["ETH"]["hold_30d"] is None           # rien de publié : inconnu
+
+
+def test_variations_de_prix_en_fractions():
+    uni = rows()["UNI"]
+    assert uni["px_chg_7d"] == -0.035 and uni["px_chg_30d"] == 0.12
+    assert rows()["ETH"]["px_chg_30d"] is None
 
 
 def test_symboles_hyperliquid():
